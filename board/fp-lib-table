@@ -1,0 +1,3 @@
+(fp_lib_table
+  (lib (name Szczys)(type KiCad)(uri "$(KIPRJMOD)/Szczys.pretty")(options "")(descr ""))
+)
