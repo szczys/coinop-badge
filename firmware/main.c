@@ -172,10 +172,10 @@ void post(void) {
   static uint8_t post_tracker = 0;
   PORTB &= ~(OUT_MASK_B);
   PORTC &= ~(OUT_MASK_C);
-  DDRD &= ~(OUT_MASK_D);
-  PORTD &= ~(OUT_MASK_D);
+  CHARLIE_DDR &= ~(OUT_MASK_D);
+  CHARLIE_PORT &= ~(OUT_MASK_D);
 
-  if (post_tracker > 21) {
+  if (post_tracker > 22) {
     post_tracker = 0;
     state = STATE_NOSTATE;
     return;
@@ -198,7 +198,8 @@ void post(void) {
     case 13: PORTD |= SHIELDLEFTIN; break;
     case 14: PORTD |= SHIELDRIGHTIN; break;
     case 15: PORTD |= SHIELDRIGHTOUT; break;
-    default: charlie(post_tracker-16); break; //Hack to run charlie([1:6]);
+    //Hack to run charlie([1:6]);
+    default: charlie(post_tracker-16); break; // (16 because we already incremented)
     };
 }
 
