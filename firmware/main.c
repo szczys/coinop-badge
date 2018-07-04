@@ -56,6 +56,9 @@ volatile unsigned char key_state;
 volatile unsigned char key_rpt;
 /************************************************************/
 
+//Used for upcounting milliseconds
+volatile uint32_t ticks;
+
 void Delay_ms(int cnt) {
 	while (cnt-->0) {
 		_delay_ms(1);
@@ -95,7 +98,7 @@ void disable_io(void) {
 }
 
 void init_timers(void) {
-  TCCR0B = 1<<CS02 | 1<<CS00;	//divide by 1024
+  TCCR0B = 1<<CS01 | 1<<CS00;	//divide by 64
   TIMSK0 = 1<<TOIE0;		//enable overflow interrupt
 }
 
@@ -258,6 +261,7 @@ void sleep_my_pretty(void) {
 
 int main(void)
 {
+  ticks = 0;
   init_io();
   init_timers();
   sei();
@@ -283,20 +287,24 @@ ISR(TIMER0_OVF_vect)           // every 10ms
   static unsigned char ct0, ct1, rpt;
   unsigned char i;
 
-  TCNT0 = (unsigned char)(signed short)-(((F_CPU / 1024) * .01) + 0.5);   // preload for 10ms
+  ++ticks;
 
-  i = key_state ^ KEY_PIN;    // key changed ? (natural state is high so no need for ~KEY_PIN
-  ct0 = ~( ct0 & i );          // reset or count ct0
-  ct1 = ct0 ^ (ct1 & i);       // reset or count ct1
-  i &= ct0 & ct1;              // count until roll over ?
-  key_state ^= i;              // then toggle debounced state
-  key_press |= key_state & i;  // 0->1: key press detect
+  TCNT0 = (unsigned char)(signed short)-(((F_CPU / 64) * .001) + 0.5);   // preload for 1ms
 
-  if( (key_state & REPEAT_MASK) == 0 )   // check repeat function 
-     rpt = REPEAT_START;      // start delay 
-  if( --rpt == 0 ){ 
-    rpt = REPEAT_NEXT;         // repeat delay 
-    key_rpt |= key_state & REPEAT_MASK; 
-  } 
+  if (((uint8_t)ticks%10) == 0) {
+    i = key_state ^ KEY_PIN;    // key changed ? (natural state is high so no need for ~KEY_PIN
+    ct0 = ~( ct0 & i );          // reset or count ct0
+    ct1 = ct0 ^ (ct1 & i);       // reset or count ct1
+    i &= ct0 & ct1;              // count until roll over ?
+    key_state ^= i;              // then toggle debounced state
+    key_press |= key_state & i;  // 0->1: key press detect
+
+    if( (key_state & REPEAT_MASK) == 0 )   // check repeat function 
+       rpt = REPEAT_START;      // start delay 
+    if( --rpt == 0 ){ 
+      rpt = REPEAT_NEXT;         // repeat delay 
+      key_rpt |= key_state & REPEAT_MASK; 
+    } 
+  }
 }
 
