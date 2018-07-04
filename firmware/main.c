@@ -59,15 +59,16 @@ void init_io(void) {
   DDRC &= ~(IN_MASK_C);
 }
 
-void toggle_pin(uint8_t pinreg, uint8_t pin) {
-  pinreg |= pin;
+void toggle_pin(char * pinreg, uint8_t pin) {
+  *pinreg |= pin;
   Delay_ms(500);
-  pinreg |= pin;
+  *pinreg |= pin;
 }
 
 void charlie(uint8_t led_num) {
   //All pins input (Hi-Z mode)
   CHARLIE_DDR &= ~(CHARLIE_MASK);
+  CHARLIE_PORT &= ~(CHARLIE_MASK);
   
   switch(led_num) {
     case 0:
@@ -113,25 +114,27 @@ void charlie(uint8_t led_num) {
 }
 
 void post(void) {
-  toggle_pin(PINB, PEWLEFTOUT1);
-  toggle_pin(PINB, PEWLEFTOUT2);
-  toggle_pin(PINB, PEWLEFTOUT3);
-  toggle_pin(PINB, PEWLEFTIN1);
-  toggle_pin(PINB, PEWLEFTIN2);
-  toggle_pin(PINB, PEWLEFTIN3);
-  toggle_pin(PINB, PEWRIGHTIN1);
-  toggle_pin(PINB, PEWRIGHTIN2);
-  toggle_pin(PINC, PEWRIGHTIN3);
-  toggle_pin(PINC, PEWRIGHTOUT1);
-  toggle_pin(PINC, PEWRIGHTOUT2);
-  toggle_pin(PINC, PEWRIGHTOUT3);
 
-  toggle_pin(PIND, SHIELDLEFTOUT);
-  toggle_pin(PIND, SHIELDLEFTIN);
-  toggle_pin(PIND, SHIELDRIGHTIN);
-  toggle_pin(PIND, SHIELDRIGHTOUT);
+  toggle_pin(&PINB, PEWLEFTOUT1);
+  toggle_pin(&PINB, PEWLEFTOUT2);
+  toggle_pin(&PINB, PEWLEFTOUT3);
+  toggle_pin(&PINB, PEWLEFTIN1);
+  toggle_pin(&PINB, PEWLEFTIN2);
+  toggle_pin(&PINB, PEWLEFTIN3);
+  toggle_pin(&PINB, PEWRIGHTIN1);
+  toggle_pin(&PINB, PEWRIGHTIN2);
+  toggle_pin(&PINC, PEWRIGHTIN3);
+  toggle_pin(&PINC, PEWRIGHTOUT1);
+  toggle_pin(&PINC, PEWRIGHTOUT2);
+  toggle_pin(&PINC, PEWRIGHTOUT3);
 
-  for (uint8_t i=1; i<6; i++) {
+  toggle_pin(&PIND, SHIELDLEFTOUT);
+  toggle_pin(&PIND, SHIELDLEFTIN);
+  toggle_pin(&PIND, SHIELDRIGHTIN);
+  toggle_pin(&PIND, SHIELDRIGHTOUT);
+
+
+  for (uint8_t i=1; i<7; i++) {
     charlie(i);
     Delay_ms(500);
   }
