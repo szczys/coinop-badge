@@ -99,10 +99,6 @@ void init_timers(void) {
   TIMSK0 = 1<<TOIE0;		//enable overflow interrupt
 }
 
-void disable_timers(void) {
-  TIMSK0 &= 1<<TOIE0;
-}
-
 void init_pcint(void) {
   PCICR |= (1<<PCIE1);
   PCMSK1 |= (1<<PCINT9);
@@ -249,19 +245,15 @@ unsigned char get_key_long( unsigned char key_mask )
 void sleep_my_pretty(void) {
   cli();                //disable interrupts
   disable_io();         //make sure we're not driving pins while asleep
-  //disable_timers();
   init_pcint();         //enable pin-change interrupts to wake from sleep
   set_sleep_mode(SLEEP_MODE_PWR_DOWN);  //Set mode for lowest power
   sleep_enable();       //Get ready for sleep
   sleep_bod_disable();  //Disable brown-out detection for lower power
   sei();                //Ensure interrupts are enabled (lest we never wake)
   sleep_cpu();          //Sleep immediately after enabling interrupts so non can fire before sleep
-  cli();
-  sleep_disable();      //Disable to we're in a known state next time we need to sleep
   disable_pcint();      //Don't need pin-change interrupts when awake
+  sleep_disable();      //Disable to we're in a known state next time we need to sleep
   init_io();            //Get IO pins ready for wakeful operations
-  //init_timers();
-  sei();
 }
 
 int main(void)
@@ -275,8 +267,8 @@ int main(void)
     //TODO: make post() non-blocking
     //post();
     if(get_key_press(KEY1)) PINB |= PEWLEFTIN2;
-    //if(get_key_press(KEY0)) sleep_my_pretty();
-    if(PINC & KEY0) sleep_my_pretty();
+    if(get_key_press(KEY0)) sleep_my_pretty();
+    //if(PINC & KEY0) sleep_my_pretty();
   }
 }
 
