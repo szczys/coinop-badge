@@ -2,6 +2,7 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <util/delay.h>
+#include <avr/sleep.h>
 
 void Delay_ms(int cnt);
 
@@ -57,6 +58,25 @@ void init_io(void) {
 
   //Set up button input
   DDRC &= ~(IN_MASK_C);
+}
+
+void disable_io(void) {
+  //Will be used for sleep modes
+
+  //Set up LED pins as inputs and disable pull-ups
+  DDRB &= ~(OUT_MASK_B);
+  PORTB &= ~(OUT_MASK_B);
+  DDRC &= ~(OUT_MASK_C);
+  PORTC &= ~(OUT_MASK_C);
+  DDRD &= ~(OUT_MASK_D);
+  PORTD &= ~(OUT_MASK_D);
+
+  //All charlieplexing pins input (Hi-Z mode)
+  CHARLIE_DDR &= ~(CHARLIE_MASK);
+  CHARLIE_PORT &= ~(CHARLIE_MASK);
+
+  //Buttons should already be set as inputs without pull-ups
+  //they connect to VCC and have external pull-downs
 }
 
 void toggle_pin(char * pinreg, uint8_t pin) {
@@ -142,13 +162,37 @@ void post(void) {
   charlie(0);
 }
 
+void sleep_my_pretty(void) {
+  cli();            //disable interrupts
+  disable_io();
+  set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+  sleep_enable();   //Get ready for sleep
+  sleep_bod_disable();
+  sei();            //Ensure interrupts are enabled (lest we never wake)
+  sleep_cpu();      //Sleep immediately after enabling interrupts so non can fire before sleep
+  sleep_disable();  //Disable to we're in a known state next time we need to sleep
+  init_io();        //Get IO pins ready for wakeful operations
+}
+
 int main(void)
 {
   init_io();
+
+  PCICR |= (1<<PCIE1);
+  PCMSK1 |= (1<<PCINT9);
+  sei();
   
   while(1)
   {
     //TODO: Implement button presses to enter sleep mode
-    post();
+    //post();
+    //if (PINC & BUT2) PORTB |= PEWLEFTIN1;
+    if (PINC & BUT1) {
+      sleep_my_pretty();
+    }
   }
+}
+
+ISR(PCINT1_vect) {
+  PORTB |= PEWLEFTIN1;
 }
