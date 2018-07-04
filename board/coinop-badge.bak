@@ -49,10 +49,10 @@ EELAYER END
 $Descr A4 11693 8268
 encoding utf-8
 Sheet 1 1
-Title ""
+Title "Coin-Op Badge"
 Date ""
-Rev ""
-Comp ""
+Rev "1.0"
+Comp "Mike Szczys - Jumptuck.com"
 Comment1 ""
 Comment2 ""
 Comment3 ""

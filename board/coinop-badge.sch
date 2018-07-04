@@ -562,8 +562,6 @@ Text GLabel 6100 1500 0    60   Input ~ 0
 CHARLIE-1
 Text GLabel 6100 1650 0    60   Input ~ 0
 CHARLIE-2
-Text GLabel 6100 3700 0    60   Input ~ 0
-CHARLIE-4
 Text GLabel 7050 1300 1    60   Input ~ 0
 ENG-1
 Text GLabel 7200 1300 1    60   Input ~ 0
@@ -610,8 +608,6 @@ Text GLabel 4150 4250 2    60   Input ~ 0
 CHARLIE-2
 Text GLabel 4750 3950 2    60   Input ~ 0
 CHARLIE-3
-Text GLabel 4150 3850 2    60   Input ~ 0
-CHARLIE-4
 Text GLabel 4150 4050 2    60   Input ~ 0
 SHIELD-1
 Text GLabel 4750 4350 2    60   Input ~ 0
@@ -928,12 +924,6 @@ Wire Wire Line
 	7050 2050 7050 1300
 Wire Wire Line
 	6950 2050 7050 2050
-Wire Wire Line
-	6450 4200 6600 4200
-Wire Wire Line
-	6450 3700 6450 4200
-Wire Wire Line
-	6100 3700 6450 3700
 Wire Wire Line
 	6500 2050 6550 2050
 Wire Wire Line
@@ -1265,4 +1255,7 @@ Wire Wire Line
 	10000 4450 10000 4150
 Wire Wire Line
 	10000 4150 9900 4150
+NoConn ~ 4150 3850
+NoConn ~ 6600 4200
+NoConn ~ 7000 4200
 $EndSCHEMATC
