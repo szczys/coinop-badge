@@ -6,6 +6,10 @@
 
 void Delay_ms(int cnt);
 
+#define STATE_NOSTATE     0
+#define STATE_POST        1
+uint8_t state;
+
 #define PEWLEFTIN1        (1<<PB0)
 #define PEWLEFTIN2        (1<<PB1)
 #define PEWLEFTIN3        (1<<PB2)
@@ -65,6 +69,11 @@ void Delay_ms(int cnt) {
 	}
 }
 
+uint32_t get_time(void) {
+  //Return the upcounting milliseconds timer (interrupt driven)
+  return ticks;
+}
+
 void init_io(void) {
   //Set up LED pins
   DDRB |= OUT_MASK_B;
@@ -109,12 +118,6 @@ void init_pcint(void) {
 
 void disable_pcint(void) {
   PCICR &= ~(1<<PCIE1);
-}
-
-void toggle_pin(char * pinreg, uint8_t pin) {
-  *pinreg |= pin;
-  Delay_ms(500);
-  *pinreg |= pin;
 }
 
 void charlie(uint8_t led_num) {
@@ -166,32 +169,37 @@ void charlie(uint8_t led_num) {
 }
 
 void post(void) {
+  static uint8_t post_tracker = 0;
+  PORTB &= ~(OUT_MASK_B);
+  PORTC &= ~(OUT_MASK_C);
+  DDRD &= ~(OUT_MASK_D);
+  PORTD &= ~(OUT_MASK_D);
 
-  toggle_pin(&PINB, PEWLEFTOUT1);
-  toggle_pin(&PINB, PEWLEFTOUT2);
-  toggle_pin(&PINB, PEWLEFTOUT3);
-  toggle_pin(&PINB, PEWLEFTIN1);
-  toggle_pin(&PINB, PEWLEFTIN2);
-  toggle_pin(&PINB, PEWLEFTIN3);
-  toggle_pin(&PINB, PEWRIGHTIN1);
-  toggle_pin(&PINB, PEWRIGHTIN2);
-  toggle_pin(&PINC, PEWRIGHTIN3);
-  toggle_pin(&PINC, PEWRIGHTOUT1);
-  toggle_pin(&PINC, PEWRIGHTOUT2);
-  toggle_pin(&PINC, PEWRIGHTOUT3);
-
-  toggle_pin(&PIND, SHIELDLEFTOUT);
-  toggle_pin(&PIND, SHIELDLEFTIN);
-  toggle_pin(&PIND, SHIELDRIGHTIN);
-  toggle_pin(&PIND, SHIELDRIGHTOUT);
-
-
-  for (uint8_t i=1; i<7; i++) {
-    charlie(i);
-    Delay_ms(500);
+  if (post_tracker > 21) {
+    post_tracker = 0;
+    state = STATE_NOSTATE;
+    return;
   }
-  //Shut of Charlieplexed LEDS
-  charlie(0);
+
+  switch(post_tracker++) {
+    case 0: PORTB |= PEWLEFTOUT1; break;
+    case 1: PORTB |= PEWLEFTOUT2; break;
+    case 2: PORTB |= PEWLEFTOUT3; break;
+    case 3: PORTB |= PEWLEFTIN1; break;
+    case 4: PORTB |= PEWLEFTIN2; break;
+    case 5: PORTB |= PEWLEFTIN3; break;
+    case 6: PORTB |= PEWRIGHTIN1; break;
+    case 7: PORTB |= PEWRIGHTIN2; break;
+    case 8: PORTC |= PEWRIGHTIN3; break;
+    case 9: PORTC |= PEWRIGHTOUT1; break;
+    case 10: PORTC |= PEWRIGHTOUT2; break;
+    case 11: PORTC |= PEWRIGHTOUT3; break;
+    case 12: PORTD |= SHIELDLEFTOUT; break;
+    case 13: PORTD |= SHIELDLEFTIN; break;
+    case 14: PORTD |= SHIELDRIGHTIN; break;
+    case 15: PORTD |= SHIELDRIGHTOUT; break;
+    default: charlie(post_tracker-16); break; //Hack to run charlie([1:6]);
+    };
 }
 
 /*--------------------------------------------------------------------------
@@ -262,12 +270,24 @@ void sleep_my_pretty(void) {
 int main(void)
 {
   ticks = 0;
+  state = STATE_POST;
+  static uint32_t wait_until = 500;
   init_io();
   init_timers();
   sei();
   
   while(1)
   {
+    switch(state) {
+      case STATE_NOSTATE:
+        break;
+      case STATE_POST:
+        if (get_time() > wait_until) {
+          wait_until = get_time() + 500;
+          post();
+        }
+        break;
+    };
     //TODO: make post() non-blocking
     //post();
     if(get_key_press(KEY1)) PINB |= PEWLEFTIN2;
