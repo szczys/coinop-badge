@@ -28,9 +28,6 @@ void Delay_ms(int cnt);
 #define CHARLIE2          (1<<PD4)
 #define CHARLIE3          (1<<PD1)
 
-#define BUT1              (1<<PC0)
-#define BUT2              (1<<PC1)
-
 #define OUT_MASK_B        (PEWLEFTIN1 | PEWLEFTIN2 | PEWLEFTIN3 | PEWLEFTOUT1 | PEWLEFTOUT2 | PEWLEFTOUT3 | PEWRIGHTIN1 | PEWRIGHTIN2)
 #define OUT_MASK_C        (PEWRIGHTIN3 | PEWRIGHTOUT1 | PEWRIGHTOUT2 | PEWRIGHTOUT3)
 #define OUT_MASK_D        (SHIELDLEFTOUT | SHIELDLEFTIN | SHIELDRIGHTOUT | SHIELDRIGHTOUT)
@@ -39,7 +36,25 @@ void Delay_ms(int cnt);
 #define CHARLIE_DDR       DDRD
 #define CHARLIE_PORT      PORTD
 
-#define IN_MASK_C         (BUT1 | BUT2)
+#define KEY0              (1<<PC0)
+#define KEY1              (1<<PC1)
+#define KEY_DDR           DDRC
+#define KEY_PORT          PORTC
+#define KEY_PIN           PINC
+#define KEY_MASK          (KEY0 | KEY1)
+
+/*********************** Debounce ****************************
+* Info on debounce code:
+* https://github.com/szczys/Button-Debounce/blob/master/debounce-test.c 
+*/
+//Debounce
+#define REPEAT_MASK   (KEY0 | KEY1)   // repeat: key1, key2 
+#define REPEAT_START   50      // after 500ms 
+#define REPEAT_NEXT   20      // every 200ms
+volatile unsigned char key_press;
+volatile unsigned char key_state;
+volatile unsigned char key_rpt;
+/************************************************************/
 
 void Delay_ms(int cnt) {
 	while (cnt-->0) {
@@ -57,7 +72,7 @@ void init_io(void) {
   CHARLIE_DDR &= ~(CHARLIE_MASK);
 
   //Set up button input
-  DDRC &= ~(IN_MASK_C);
+  KEY_DDR &= ~KEY_MASK;
 }
 
 void disable_io(void) {
@@ -77,6 +92,24 @@ void disable_io(void) {
 
   //Buttons should already be set as inputs without pull-ups
   //they connect to VCC and have external pull-downs
+}
+
+void init_timers(void) {
+  TCCR0B = 1<<CS02 | 1<<CS00;	//divide by 1024
+  TIMSK0 = 1<<TOIE0;		//enable overflow interrupt
+}
+
+void disable_timers(void) {
+  TIMSK0 &= 1<<TOIE0;
+}
+
+void init_pcint(void) {
+  PCICR |= (1<<PCIE1);
+  PCMSK1 |= (1<<PCINT9);
+}
+
+void disable_pcint(void) {
+  PCICR &= ~(1<<PCIE1);
 }
 
 void toggle_pin(char * pinreg, uint8_t pin) {
@@ -162,37 +195,116 @@ void post(void) {
   charlie(0);
 }
 
+/*--------------------------------------------------------------------------
+  FUNC: 8/1/11 - Used to read debounced button presses
+  PARAMS: A keymask corresponding to the pin for the button you with to poll
+  RETURNS: A keymask where any high bits represent a button press
+--------------------------------------------------------------------------*/
+unsigned char get_key_press( unsigned char key_mask )
+{
+  cli();			// read and clear atomic !
+  key_mask &= key_press;	// read key(s)
+  key_press ^= key_mask;	// clear key(s)
+  sei();
+  return key_mask;
+}
+
+/*--------------------------------------------------------------------------
+  FUNC: 8/1/11 - Used to check for debounced buttons that are held down
+  PARAMS: A keymask corresponding to the pin for the button you with to poll
+  RETURNS: A keymask where any high bits is a button held long enough for
+		its input to be repeated
+--------------------------------------------------------------------------*/
+unsigned char get_key_rpt( unsigned char key_mask ) 
+{ 
+  cli();               // read and clear atomic ! 
+  key_mask &= key_rpt;                           // read key(s) 
+  key_rpt ^= key_mask;                           // clear key(s) 
+  sei(); 
+  return key_mask; 
+} 
+
+/*--------------------------------------------------------------------------
+  FUNC: 8/1/11 - Used to read debounced button released after a short press
+  PARAMS: A keymask corresponding to the pin for the button you with to poll
+  RETURNS: A keymask where any high bits represent a quick press and release
+--------------------------------------------------------------------------*/
+unsigned char get_key_short( unsigned char key_mask ) 
+{ 
+  cli();         // read key state and key press atomic ! 
+  return get_key_press( ~key_state & key_mask ); 
+} 
+
+/*--------------------------------------------------------------------------
+  FUNC: 8/1/11 - Used to read debounced button held for REPEAT_START amount
+	of time.
+  PARAMS: A keymask corresponding to the pin for the button you with to poll
+  RETURNS: A keymask where any high bits represent a long button press
+--------------------------------------------------------------------------*/
+unsigned char get_key_long( unsigned char key_mask ) 
+{ 
+  return get_key_press( get_key_rpt( key_mask )); 
+} 
+
 void sleep_my_pretty(void) {
-  cli();            //disable interrupts
-  disable_io();
-  set_sleep_mode(SLEEP_MODE_PWR_DOWN);
-  sleep_enable();   //Get ready for sleep
-  sleep_bod_disable();
-  sei();            //Ensure interrupts are enabled (lest we never wake)
-  sleep_cpu();      //Sleep immediately after enabling interrupts so non can fire before sleep
-  sleep_disable();  //Disable to we're in a known state next time we need to sleep
-  init_io();        //Get IO pins ready for wakeful operations
+  cli();                //disable interrupts
+  disable_io();         //make sure we're not driving pins while asleep
+  //disable_timers();
+  init_pcint();         //enable pin-change interrupts to wake from sleep
+  set_sleep_mode(SLEEP_MODE_PWR_DOWN);  //Set mode for lowest power
+  sleep_enable();       //Get ready for sleep
+  sleep_bod_disable();  //Disable brown-out detection for lower power
+  sei();                //Ensure interrupts are enabled (lest we never wake)
+  sleep_cpu();          //Sleep immediately after enabling interrupts so non can fire before sleep
+  cli();
+  sleep_disable();      //Disable to we're in a known state next time we need to sleep
+  disable_pcint();      //Don't need pin-change interrupts when awake
+  init_io();            //Get IO pins ready for wakeful operations
+  //init_timers();
+  sei();
 }
 
 int main(void)
 {
   init_io();
-
-  PCICR |= (1<<PCIE1);
-  PCMSK1 |= (1<<PCINT9);
+  init_timers();
   sei();
   
   while(1)
   {
-    //TODO: Implement button presses to enter sleep mode
+    //TODO: make post() non-blocking
     //post();
-    //if (PINC & BUT2) PORTB |= PEWLEFTIN1;
-    if (PINC & BUT1) {
-      sleep_my_pretty();
-    }
+    if(get_key_press(KEY1)) PINB |= PEWLEFTIN2;
+    //if(get_key_press(KEY0)) sleep_my_pretty();
+    if(PINC & KEY0) sleep_my_pretty();
   }
 }
 
+/*
 ISR(PCINT1_vect) {
-  PORTB |= PEWLEFTIN1;
+  //Don't actually need an ISR to wake from sleep
 }
+*/
+
+ISR(TIMER0_OVF_vect)           // every 10ms
+{
+  static unsigned char ct0, ct1, rpt;
+  unsigned char i;
+
+  TCNT0 = (unsigned char)(signed short)-(((F_CPU / 1024) * .01) + 0.5);   // preload for 10ms
+
+  i = key_state ^ KEY_PIN;    // key changed ? (natural state is high so no need for ~KEY_PIN
+  ct0 = ~( ct0 & i );          // reset or count ct0
+  ct1 = ct0 ^ (ct1 & i);       // reset or count ct1
+  i &= ct0 & ct1;              // count until roll over ?
+  key_state ^= i;              // then toggle debounced state
+  key_press |= key_state & i;  // 0->1: key press detect
+
+  if( (key_state & REPEAT_MASK) == 0 )   // check repeat function 
+     rpt = REPEAT_START;      // start delay 
+  if( --rpt == 0 ){ 
+    rpt = REPEAT_NEXT;         // repeat delay 
+    key_rpt |= key_state & REPEAT_MASK; 
+  } 
+}
+
