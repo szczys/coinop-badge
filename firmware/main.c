@@ -289,21 +289,19 @@ int main(void)
         }
         break;
     };
-    //TODO: make post() non-blocking
-    //post();
+
     if(get_key_press(KEY1)) PINB |= PEWLEFTIN2;
     if(get_key_press(KEY0)) sleep_my_pretty();
-    //if(PINC & KEY0) sleep_my_pretty();
   }
 }
 
-/*
+
 ISR(PCINT1_vect) {
   //Don't actually need an ISR to wake from sleep
 }
-*/
 
-ISR(TIMER0_OVF_vect)           // every 10ms
+
+ISR(TIMER0_OVF_vect)           // every 1ms
 {
   static unsigned char ct0, ct1, rpt;
   unsigned char i;
