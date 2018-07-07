@@ -37,9 +37,10 @@ uint8_t state;
 #define OUT_MASK_D        (SHIELDLEFTOUT | SHIELDLEFTIN | SHIELDRIGHTIN | SHIELDRIGHTOUT)
 
 //Used to multiplex RED LEDs
-volatile uint8_t bmatrix[6];
-volatile uint8_t cmatrix[6];
-volatile uint8_t dmatrix[6];
+volatile uint8_t fade_resolution = 24; //Must be 6, 12, 18 or 24
+volatile uint8_t bmatrix[24];
+volatile uint8_t cmatrix[24];
+volatile uint8_t dmatrix[24];
 const uint8_t led_order[16] = { PEWLEFTOUT1, PEWLEFTOUT2, PEWLEFTOUT3, \
                                 PEWLEFTIN1, PEWLEFTIN2, PEWLEFTIN3, \
                                 PEWRIGHTIN1, PEWRIGHTIN2, PEWRIGHTIN3, \
@@ -122,7 +123,7 @@ void init_timers(void) {
   TIMSK0 = 1<<TOIE0;		//enable overflow interrupt
 
   TCCR1B = 1<<WGM12 | 1<<CS11 | 1<<CS10;  //CTC mode with prescaler of 64
-  OCR1AL = 125; // 1 kHz
+  OCR1AL = 80; // 1 kHz
   //TIMSK1 |= 1<<OCIE1A;
 
 }
@@ -300,6 +301,50 @@ void set_led(uint8_t lednum, uint8_t onoff) {
   }
 }
 
+void fade_led(uint8_t lednum, uint8_t dimness) {
+  uint8_t * dimarray;
+  if (lednum < 8) dimarray = bmatrix;
+  else if (lednum < 12) dimarray = cmatrix;
+  else if (lednum < 16) dimarray = dmatrix;
+  else return;
+
+  uint8_t row = scan_order[lednum];
+  uint8_t col = led_order[lednum];
+
+  switch(dimness) {
+    case 0:
+      dimarray[row] &= ~col;
+      dimarray[6+row] &= ~col;
+      dimarray[12+row] &= ~col;
+      dimarray[18+row] &= ~col;
+      break;
+    case 1:
+      dimarray[row] |= col;
+      dimarray[6+row] &= ~col;
+      dimarray[12+row] &= ~col;
+      dimarray[18+row] &= ~col;
+      break;
+    case 2:
+      dimarray[row] |= col;
+      dimarray[6+row] &= ~col;
+      dimarray[12+row] |= col;
+      dimarray[18+row] &= ~col;
+      break;
+    case 3:
+      dimarray[row] |= col;
+      dimarray[6+row] |= col;
+      dimarray[12+row] |= col;
+      dimarray[18+row] &= ~col;
+      break;
+    case 4:
+      dimarray[row] |= col;
+      dimarray[6+row] |= col;
+      dimarray[12+row] |= col;
+      dimarray[18+row] |= col;
+      break;
+  };
+}
+
 int main(void)
 {
   ticks = 0;
@@ -309,7 +354,7 @@ int main(void)
   
   
   
-  for (uint8_t i=0; i<6; i++) {
+  for (uint8_t i=0; i<24; i++) {
     bmatrix[i] = 0;
     cmatrix[i] = 0;
     dmatrix[i] = 0;
@@ -318,15 +363,22 @@ int main(void)
   init_timers();
   sei();
 
-  for (uint8_t i=0; i<16; i++) set_led(i,1);
+  for (uint8_t i=0; i<16; i++) fade_led(i,4);
 
-
+  uint8_t counter = 0;
   while(1)
   {
     switch(state) {
       case STATE_NOSTATE:
-        TIMSK1 |= 1<<OCIE1A;
-        while(1) {;;}
+        if (get_time() > wait_until) {
+          if ((TIMSK1 & 1<<OCIE1A) == 0) {
+            TIMSK1 |= 1<<OCIE1A;
+            counter = 0;
+          }
+          for (uint8_t i=0; i<16; i++) fade_led(i,counter);
+          if (++counter > 4) counter = 0;
+          wait_until = get_time() + 2000;
+        }
         break;
       case STATE_POST:
         if (get_time() > wait_until) {
@@ -337,8 +389,9 @@ int main(void)
     };
     
     if(get_key_press(KEY1)) {
-      //PORTB |= PEWLEFTIN2;    
-      PINB |= PEWLEFTIN2;
+      state = STATE_POST;
+      TIMSK1 &= ~(1<<OCIE1A);
+      wait_until = 0;
     }
     if(get_key_press(KEY0)) sleep_my_pretty();
   }
@@ -389,6 +442,6 @@ ISR(TIMER1_COMPA_vect) {
   charlie(c++);
   if (c>6) c=1;
 
-  if (++dimness > 5) dimness = 0;
+  if (++dimness >= fade_resolution) dimness = 0;
   
 }
