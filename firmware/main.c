@@ -37,16 +37,18 @@ uint8_t state;
 #define OUT_MASK_D        (SHIELDLEFTOUT | SHIELDLEFTIN | SHIELDRIGHTIN | SHIELDRIGHTOUT)
 
 //Used to multiplex RED LEDs
-volatile uint8_t fade_resolution = 24; //Must be 6, 12, 18 or 24
-volatile uint8_t bmatrix[24];
-volatile uint8_t cmatrix[24];
-volatile uint8_t dmatrix[24];
+#define FADE_RESOLUTION   96
+volatile uint8_t bmatrix[FADE_RESOLUTION];
+volatile uint8_t cmatrix[FADE_RESOLUTION];
+volatile uint8_t dmatrix[FADE_RESOLUTION];
 const uint8_t led_order[16] = { PEWLEFTOUT1, PEWLEFTOUT2, PEWLEFTOUT3, \
                                 PEWLEFTIN1, PEWLEFTIN2, PEWLEFTIN3, \
                                 PEWRIGHTIN1, PEWRIGHTIN2, PEWRIGHTIN3, \
                                 PEWRIGHTOUT1, PEWRIGHTOUT2, PEWRIGHTOUT3, \
                                 SHIELDLEFTOUT, SHIELDLEFTIN, SHIELDRIGHTIN, SHIELDRIGHTOUT};
 const uint8_t scan_order[16] = { 0,1,2,3,4,5,3,4,5,0,1,2,0,2,3,5 };
+const uint8_t pwm_distribution[16] = { 0, 8, 4, 12, 1, 9, 5, 13, 2, 10, 6, 14, 3, 7, 11, 15 };
+const uint8_t logscale[18] = { 1,2,3,4,5,6,7,10,14, 16, 14, 10, 7, 6, 5, 4, 3, 2 };
 
 #define CHARLIE_MASK      (CHARLIE1 | CHARLIE2 | CHARLIE3)
 #define CHARLIE_DDR       DDRD
@@ -123,7 +125,7 @@ void init_timers(void) {
   TIMSK0 = 1<<TOIE0;		//enable overflow interrupt
 
   TCCR1B = 1<<WGM12 | 1<<CS11 | 1<<CS10;  //CTC mode with prescaler of 64
-  OCR1AL = 80; // 1 kHz
+  OCR1AL = 20; // 1 kHz
   //TIMSK1 |= 1<<OCIE1A;
 
 }
@@ -311,6 +313,12 @@ void fade_led(uint8_t lednum, uint8_t dimness) {
   uint8_t row = scan_order[lednum];
   uint8_t col = led_order[lednum];
 
+  for (uint8_t i=0; i<16; i++) { dimarray[(i*6)+row] &= ~col; } //Clear all set values
+
+  for (uint8_t i=0; i<dimness; i++) {
+    dimarray[((pwm_distribution[i]*6)+row)] |= col;
+  }
+/*
   switch(dimness) {
     case 0:
       dimarray[row] &= ~col;
@@ -343,6 +351,7 @@ void fade_led(uint8_t lednum, uint8_t dimness) {
       dimarray[18+row] |= col;
       break;
   };
+*/
 }
 
 int main(void)
@@ -363,7 +372,7 @@ int main(void)
   init_timers();
   sei();
 
-  for (uint8_t i=0; i<16; i++) fade_led(i,4);
+  for (uint8_t i=0; i<16; i++) fade_led(i,16);
 
   uint8_t counter = 0;
   while(1)
@@ -375,9 +384,9 @@ int main(void)
             TIMSK1 |= 1<<OCIE1A;
             counter = 0;
           }
-          for (uint8_t i=0; i<16; i++) fade_led(i,counter);
-          if (++counter > 4) counter = 0;
-          wait_until = get_time() + 2000;
+          for (uint8_t i=0; i<16; i++) fade_led(i,logscale[counter]);
+          if (++counter >= 18) counter = 0;
+          wait_until = get_time() + 40;
         }
         break;
       case STATE_POST:
@@ -442,6 +451,6 @@ ISR(TIMER1_COMPA_vect) {
   charlie(c++);
   if (c>6) c=1;
 
-  if (++dimness >= fade_resolution) dimness = 0;
+  if (++dimness >= FADE_RESOLUTION) dimness = 0;
   
 }
