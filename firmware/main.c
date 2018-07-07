@@ -50,6 +50,9 @@ const uint8_t scan_order[16] = { 0,1,2,3,4,5,3,4,5,0,1,2,0,2,3,5 };
 const uint8_t pwm_distribution[16] = { 0, 8, 4, 12, 1, 9, 5, 13, 2, 10, 6, 14, 3, 7, 11, 15 };
 const uint8_t logscale[18] = { 1,2,3,4,5,6,7,10,14, 16, 14, 10, 7, 6, 5, 4, 3, 2 };
 
+volatile uint8_t charlie_array[6] = { 0, 0, 0, 0, 0, 0 };
+const uint8_t charlie_spin_idx[6] = { 1,4,3,2,5,6 };
+
 #define CHARLIE_MASK      (CHARLIE1 | CHARLIE2 | CHARLIE3)
 #define CHARLIE_DDR       DDRD
 #define CHARLIE_PORT      PORTD
@@ -318,40 +321,10 @@ void fade_led(uint8_t lednum, uint8_t dimness) {
   for (uint8_t i=0; i<dimness; i++) {
     dimarray[((pwm_distribution[i]*6)+row)] |= col;
   }
-/*
-  switch(dimness) {
-    case 0:
-      dimarray[row] &= ~col;
-      dimarray[6+row] &= ~col;
-      dimarray[12+row] &= ~col;
-      dimarray[18+row] &= ~col;
-      break;
-    case 1:
-      dimarray[row] |= col;
-      dimarray[6+row] &= ~col;
-      dimarray[12+row] &= ~col;
-      dimarray[18+row] &= ~col;
-      break;
-    case 2:
-      dimarray[row] |= col;
-      dimarray[6+row] &= ~col;
-      dimarray[12+row] |= col;
-      dimarray[18+row] &= ~col;
-      break;
-    case 3:
-      dimarray[row] |= col;
-      dimarray[6+row] |= col;
-      dimarray[12+row] |= col;
-      dimarray[18+row] &= ~col;
-      break;
-    case 4:
-      dimarray[row] |= col;
-      dimarray[6+row] |= col;
-      dimarray[12+row] |= col;
-      dimarray[18+row] |= col;
-      break;
-  };
-*/
+}
+
+void clear_charlie_array(void) {
+  for (uint8_t i=0; i<6; i++) charlie_array[i] = 0;
 }
 
 int main(void)
@@ -375,6 +348,7 @@ int main(void)
   for (uint8_t i=0; i<16; i++) fade_led(i,16);
 
   uint8_t counter = 0;
+  uint32_t charlie_timer = 0;
   while(1)
   {
     switch(state) {
@@ -383,10 +357,18 @@ int main(void)
           if ((TIMSK1 & 1<<OCIE1A) == 0) {
             TIMSK1 |= 1<<OCIE1A;
             counter = 0;
+            clear_charlie_array();
           }
           for (uint8_t i=0; i<16; i++) fade_led(i,logscale[counter]);
           if (++counter >= 18) counter = 0;
           wait_until = get_time() + 40;
+        }
+        if (get_time() > charlie_timer) {
+          static uint8_t charlie_spin = 0;
+          charlie_timer = get_time() + 120;
+          charlie_array[0] = charlie_spin_idx[charlie_spin];
+          charlie_array[4] = charlie_spin_idx[charlie_spin+3];
+          if (++charlie_spin > 2) charlie_spin = 0;
         }
         break;
       case STATE_POST:
@@ -447,9 +429,9 @@ ISR(TIMER1_COMPA_vect) {
   PORTD &= ~(OUT_MASK_D);
   PORTD |= dmatrix[dimness];
 
-  static uint8_t c = 1;
-  charlie(c++);
-  if (c>6) c=1;
+  static uint8_t c = 0;
+  charlie(charlie_array[c]);
+  if (++c>5) c=0;
 
   if (++dimness >= FADE_RESOLUTION) dimness = 0;
   
