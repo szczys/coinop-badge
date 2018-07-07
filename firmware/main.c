@@ -1,4 +1,4 @@
-#define F_CPU 8000000L
+#define F_CPU 1000000L
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <util/delay.h>
@@ -34,7 +34,7 @@ uint8_t state;
 
 #define OUT_MASK_B        (PEWLEFTIN1 | PEWLEFTIN2 | PEWLEFTIN3 | PEWLEFTOUT1 | PEWLEFTOUT2 | PEWLEFTOUT3 | PEWRIGHTIN1 | PEWRIGHTIN2)
 #define OUT_MASK_C        (PEWRIGHTIN3 | PEWRIGHTOUT1 | PEWRIGHTOUT2 | PEWRIGHTOUT3)
-#define OUT_MASK_D        (SHIELDLEFTOUT | SHIELDLEFTIN | SHIELDRIGHTOUT | SHIELDRIGHTOUT)
+#define OUT_MASK_D        (SHIELDLEFTOUT | SHIELDLEFTIN | SHIELDRIGHTIN | SHIELDRIGHTOUT)
 
 #define CHARLIE_MASK      (CHARLIE1 | CHARLIE2 | CHARLIE3)
 #define CHARLIE_DDR       DDRD
@@ -109,11 +109,17 @@ void disable_io(void) {
 void init_timers(void) {
   TCCR0B = 1<<CS01 | 1<<CS00;	//divide by 64
   TIMSK0 = 1<<TOIE0;		//enable overflow interrupt
+
+  TCCR1B = 1<<WGM12 | 1<<CS11 | 1<<CS10;  //CTC mode with prescaler of 64
+  OCR1AL = 125; // 1 kHz
+  //TIMSK1 |= 1<<OCIE1A;
+
 }
 
 void init_pcint(void) {
   PCICR |= (1<<PCIE1);
   PCMSK1 |= (1<<PCINT9);
+  PCIFR |= 1<<PCIF1;    //Clear the PCINT flag (might not have been done after last wakeup)
 }
 
 void disable_pcint(void) {
@@ -172,8 +178,8 @@ void post(void) {
   static uint8_t post_tracker = 0;
   PORTB &= ~(OUT_MASK_B);
   PORTC &= ~(OUT_MASK_C);
-  CHARLIE_DDR &= ~(OUT_MASK_D);
-  CHARLIE_PORT &= ~(OUT_MASK_D);
+  CHARLIE_DDR &= ~(CHARLIE_MASK);
+  CHARLIE_PORT &= ~(OUT_MASK_D | CHARLIE_MASK);
 
   if (post_tracker > 22) {
     post_tracker = 0;
@@ -260,7 +266,7 @@ void sleep_my_pretty(void) {
   init_pcint();         //enable pin-change interrupts to wake from sleep
   set_sleep_mode(SLEEP_MODE_PWR_DOWN);  //Set mode for lowest power
   sleep_enable();       //Get ready for sleep
-  sleep_bod_disable();  //Disable brown-out detection for lower power
+  //sleep_bod_disable();  //Disable brown-out detection for lower power (apparently not for ATmega48
   sei();                //Ensure interrupts are enabled (lest we never wake)
   sleep_cpu();          //Sleep immediately after enabling interrupts so non can fire before sleep
   disable_pcint();      //Don't need pin-change interrupts when awake
@@ -289,8 +295,11 @@ int main(void)
         }
         break;
     };
-
-    if(get_key_press(KEY1)) PINB |= PEWLEFTIN2;
+    
+    if(get_key_press(KEY1)) {
+      //PORTB |= PEWLEFTIN2;    
+      PINB |= PEWLEFTIN2;
+    }
     if(get_key_press(KEY0)) sleep_my_pretty();
   }
 }
@@ -327,3 +336,8 @@ ISR(TIMER0_OVF_vect)           // every 1ms
   }
 }
 
+ISR(TIMER1_COMPA_vect) {
+  static uint8_t c = 1;
+  charlie(c++);
+  if (c>6) c=1;
+}
