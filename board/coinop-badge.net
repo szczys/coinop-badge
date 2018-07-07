@@ -1,7 +1,7 @@
 (export (version D)
   (design
     (source /home/mike/compile/coinop-badge/board/coinop-badge.sch)
-    (date "Tue 03 Jul 2018 10:57:55 PM CDT")
+    (date "Sat 07 Jul 2018 01:14:24 PM CDT")
     (tool "Eeschema 4.0.7-e2-6376~60~ubuntu17.10.1")
     (sheet (number 1) (name /) (tstamps /)
       (title_block
@@ -405,10 +405,10 @@
   (libraries
     (library (logical device)
       (uri /usr/share/kicad/library/device.lib))
-    (library (logical conn)
-      (uri /usr/share/kicad/library/conn.lib))
     (library (logical switches)
       (uri /usr/share/kicad/library/switches.lib))
+    (library (logical conn)
+      (uri /usr/share/kicad/library/conn.lib))
     (library (logical atmel)
       (uri /usr/share/kicad/library/atmel.lib))
     (library (logical MF_Connectors)
