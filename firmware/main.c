@@ -1,4 +1,4 @@
-#define F_CPU 1000000L
+#define F_CPU 8000000L
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <util/delay.h>
@@ -35,6 +35,17 @@ uint8_t state;
 #define OUT_MASK_B        (PEWLEFTIN1 | PEWLEFTIN2 | PEWLEFTIN3 | PEWLEFTOUT1 | PEWLEFTOUT2 | PEWLEFTOUT3 | PEWRIGHTIN1 | PEWRIGHTIN2)
 #define OUT_MASK_C        (PEWRIGHTIN3 | PEWRIGHTOUT1 | PEWRIGHTOUT2 | PEWRIGHTOUT3)
 #define OUT_MASK_D        (SHIELDLEFTOUT | SHIELDLEFTIN | SHIELDRIGHTIN | SHIELDRIGHTOUT)
+
+//Used to multiplex RED LEDs
+volatile uint8_t bmatrix[6];
+volatile uint8_t cmatrix[6];
+volatile uint8_t dmatrix[6];
+const uint8_t led_order[16] = { PEWLEFTOUT1, PEWLEFTOUT2, PEWLEFTOUT3, \
+                                PEWLEFTIN1, PEWLEFTIN2, PEWLEFTIN3, \
+                                PEWRIGHTIN1, PEWRIGHTIN2, PEWRIGHTIN3, \
+                                PEWRIGHTOUT1, PEWRIGHTOUT2, PEWRIGHTOUT3, \
+                                SHIELDLEFTOUT, SHIELDLEFTIN, SHIELDRIGHTIN, SHIELDRIGHTOUT};
+const uint8_t scan_order[16] = { 0,1,2,3,4,5,3,4,5,0,1,2,0,2,3,5 };
 
 #define CHARLIE_MASK      (CHARLIE1 | CHARLIE2 | CHARLIE3)
 #define CHARLIE_DDR       DDRD
@@ -274,23 +285,52 @@ void sleep_my_pretty(void) {
   init_io();            //Get IO pins ready for wakeful operations
 }
 
+void set_led(uint8_t lednum, uint8_t onoff) {
+  if (lednum < 8) {
+    if (onoff) bmatrix[scan_order[lednum]] |= led_order[lednum];
+    else bmatrix[scan_order[lednum]] &= ~led_order[lednum];
+  }
+  else if (lednum < 12) {
+    if (onoff) cmatrix[scan_order[lednum]] |= led_order[lednum];
+    else cmatrix[scan_order[lednum]] &= ~led_order[lednum];
+  }
+  else if (lednum < 16) {
+    if (onoff) dmatrix[scan_order[lednum]] |= led_order[lednum];
+    else dmatrix[scan_order[lednum]] &= ~led_order[lednum];
+  }
+}
+
 int main(void)
 {
   ticks = 0;
   state = STATE_POST;
-  static uint32_t wait_until = 500;
+  static uint32_t wait_until = 0;
   init_io();
+  
+  
+  
+  for (uint8_t i=0; i<6; i++) {
+    bmatrix[i] = 0;
+    cmatrix[i] = 0;
+    dmatrix[i] = 0;
+  }
+
   init_timers();
   sei();
-  
+
+  for (uint8_t i=0; i<16; i++) set_led(i,1);
+
+
   while(1)
   {
     switch(state) {
       case STATE_NOSTATE:
+        TIMSK1 |= 1<<OCIE1A;
+        while(1) {;;}
         break;
       case STATE_POST:
         if (get_time() > wait_until) {
-          wait_until = get_time() + 500;
+          wait_until = get_time() + 100;
           post();
         }
         break;
@@ -337,7 +377,18 @@ ISR(TIMER0_OVF_vect)           // every 1ms
 }
 
 ISR(TIMER1_COMPA_vect) {
+  static uint8_t dimness = 0;
+  PORTB &= ~(OUT_MASK_B);
+  PORTB |= bmatrix[dimness];
+  PORTC &= ~(OUT_MASK_C);
+  PORTC |= cmatrix[dimness];
+  PORTD &= ~(OUT_MASK_D);
+  PORTD |= dmatrix[dimness];
+
   static uint8_t c = 1;
   charlie(c++);
   if (c>6) c=1;
+
+  if (++dimness > 5) dimness = 0;
+  
 }
