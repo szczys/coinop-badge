@@ -8,6 +8,8 @@ void Delay_ms(int cnt);
 
 #define STATE_NOSTATE     0
 #define STATE_POST        1
+#define STATE_FADE        2
+#define STATE_PEW         3
 uint8_t state;
 
 #define PEWLEFTIN1        (1<<PB0)
@@ -86,6 +88,8 @@ volatile uint32_t ticks; //Used for upcounting milliseconds
 uint32_t wait_until = 0;
 uint32_t wait_until2 = 0;
 uint32_t charlie_timer = 0;
+uint8_t counter = 0;
+uint8_t counter2 = 0;
 
 void Delay_ms(int cnt) {
 	while (cnt-->0) {
@@ -404,6 +408,42 @@ void pew(uint8_t * left_counter, uint32_t * left_next_step_time, uint8_t * right
   }
 }
 
+void clean_slate(void) {
+  //Set all IO back to initialization
+  TIMSK1 &= ~(1<<OCIE1A); //Stop the LED scanning timer
+  //Set all direct drive LEDs to off
+  PORTB &= ~OUT_MASK_B;
+  PORTC &= ~OUT_MASK_C;
+  PORTD &= ~OUT_MASK_D;
+  //Reset counters and wait times
+  wait_until = 0;
+  wait_until2 = 0;
+  counter = 0;
+  counter2 = 0;
+}
+
+void advance_state(void) {
+  clean_slate();
+
+  switch(state) {
+    case STATE_NOSTATE:
+      ++state;
+      break;
+    case STATE_POST:
+      TIMSK1 |= 1<<OCIE1A;
+      ++state;
+      break;
+    case STATE_FADE:
+      init_pew(&counter, &counter2);
+      ++state;
+      break;
+    case STATE_PEW:
+      state = 0;
+      
+      break;    
+  };
+}
+
 int main(void)
 {
   ticks = 0;
@@ -411,8 +451,8 @@ int main(void)
   wait_until = 0;
   wait_until2 = 0;
   charlie_timer = 0;
-  uint8_t counter = 0;
-  uint8_t counter2 = 0;
+  counter = 0;
+  counter2 = 0;
   init_io();
   
   
