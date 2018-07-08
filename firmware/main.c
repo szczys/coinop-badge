@@ -3,6 +3,7 @@
 #include <avr/interrupt.h>
 #include <util/delay.h>
 #include <avr/sleep.h>
+#include "debounce.h"
 
 void Delay_ms(int cnt);
 
@@ -63,26 +64,6 @@ const uint8_t charlie_spin_idx[6] = { 1,4,3,2,5,6 };
 #define CHARLIE_MASK      (CHARLIE1 | CHARLIE2 | CHARLIE3)
 #define CHARLIE_DDR       DDRD
 #define CHARLIE_PORT      PORTD
-
-#define KEY0              (1<<PC0)
-#define KEY1              (1<<PC1)
-#define KEY_DDR           DDRC
-#define KEY_PORT          PORTC
-#define KEY_PIN           PINC
-#define KEY_MASK          (KEY0 | KEY1)
-
-/*********************** Debounce ****************************
-* Info on debounce code:
-* https://github.com/szczys/Button-Debounce/blob/master/debounce-test.c 
-*/
-//Debounce
-#define REPEAT_MASK   (KEY0 | KEY1)   // repeat: key1, key2 
-#define REPEAT_START   50      // after 500ms 
-#define REPEAT_NEXT   20      // every 200ms
-volatile unsigned char key_press;
-volatile unsigned char key_state;
-volatile unsigned char key_rpt;
-/************************************************************/
 
 volatile uint32_t ticks; //Used for upcounting milliseconds
 uint32_t wait_until = 0;
@@ -236,57 +217,6 @@ void post(void) {
     default: charlie(post_tracker-16); break; // (16 because we already incremented)
     };
 }
-
-/*--------------------------------------------------------------------------
-  FUNC: 8/1/11 - Used to read debounced button presses
-  PARAMS: A keymask corresponding to the pin for the button you with to poll
-  RETURNS: A keymask where any high bits represent a button press
---------------------------------------------------------------------------*/
-unsigned char get_key_press( unsigned char key_mask )
-{
-  cli();			// read and clear atomic !
-  key_mask &= key_press;	// read key(s)
-  key_press ^= key_mask;	// clear key(s)
-  sei();
-  return key_mask;
-}
-
-/*--------------------------------------------------------------------------
-  FUNC: 8/1/11 - Used to check for debounced buttons that are held down
-  PARAMS: A keymask corresponding to the pin for the button you with to poll
-  RETURNS: A keymask where any high bits is a button held long enough for
-		its input to be repeated
---------------------------------------------------------------------------*/
-unsigned char get_key_rpt( unsigned char key_mask ) 
-{ 
-  cli();               // read and clear atomic ! 
-  key_mask &= key_rpt;                           // read key(s) 
-  key_rpt ^= key_mask;                           // clear key(s) 
-  sei(); 
-  return key_mask; 
-} 
-
-/*--------------------------------------------------------------------------
-  FUNC: 8/1/11 - Used to read debounced button released after a short press
-  PARAMS: A keymask corresponding to the pin for the button you with to poll
-  RETURNS: A keymask where any high bits represent a quick press and release
---------------------------------------------------------------------------*/
-unsigned char get_key_short( unsigned char key_mask ) 
-{ 
-  cli();         // read key state and key press atomic ! 
-  return get_key_press( ~key_state & key_mask ); 
-} 
-
-/*--------------------------------------------------------------------------
-  FUNC: 8/1/11 - Used to read debounced button held for REPEAT_START amount
-	of time.
-  PARAMS: A keymask corresponding to the pin for the button you with to poll
-  RETURNS: A keymask where any high bits represent a long button press
---------------------------------------------------------------------------*/
-unsigned char get_key_long( unsigned char key_mask ) 
-{ 
-  return get_key_press( get_key_rpt( key_mask )); 
-} 
 
 void sleep_my_pretty(void) {
   cli();                //disable interrupts
@@ -504,27 +434,12 @@ ISR(PCINT1_vect) {
 
 ISR(TIMER0_OVF_vect)           // every 1ms
 {
-  static unsigned char ct0, ct1, rpt;
-  unsigned char i;
-
   ++ticks;
 
   TCNT0 = (unsigned char)(signed short)-(((F_CPU / 64) * .001) + 0.5);   // preload for 1ms
 
   if (((uint8_t)ticks%10) == 0) {
-    i = key_state ^ KEY_PIN;    // key changed ? (natural state is high so no need for ~KEY_PIN
-    ct0 = ~( ct0 & i );          // reset or count ct0
-    ct1 = ct0 ^ (ct1 & i);       // reset or count ct1
-    i &= ct0 & ct1;              // count until roll over ?
-    key_state ^= i;              // then toggle debounced state
-    key_press |= key_state & i;  // 0->1: key press detect
-
-    if( (key_state & REPEAT_MASK) == 0 )   // check repeat function 
-       rpt = REPEAT_START;      // start delay 
-    if( --rpt == 0 ){ 
-      rpt = REPEAT_NEXT;         // repeat delay 
-      key_rpt |= key_state & REPEAT_MASK; 
-    } 
+    key_isr();
   }
 }
 
