@@ -14,6 +14,7 @@ void Delay_ms(int cnt);
 #define STATE_POST          4
 #define STATE_FADE          5
 #define STATE_PEW           6
+#define STATE_SPARKLE       7
 
 uint8_t state;
 
@@ -56,11 +57,13 @@ const uint8_t led_order[16] = { PEWLEFTOUT1, PEWLEFTOUT2, PEWLEFTOUT3, \
 const uint8_t scan_order[16] = { 0,1,2,3,4,5,3,4,5,0,1,2,0,2,3,5 };
 const uint8_t pwm_distribution[16] = { 0, 8, 4, 12, 1, 9, 5, 13, 2, 10, 6, 14, 3, 7, 11, 15 };
 const uint8_t logscale[18] = { 1,2,3,4,5,6,7,10,14, 16, 14, 10, 7, 6, 5, 4, 3, 2 };
+const uint8_t sparkle_rando[20] = { 6, 14,  8,  0,  4,  3, 17,  9,  2, 19,  5, 11, 13, 18, 12,  7, 10, 15, 16,  1 };
 
 #define PULSATE_DELAY       40
 #define CHARLIE_SPIN_DELAY  120
 #define PEW_MAX             8
 #define PEW_DELAY           80
+#define SPARKLE_DELAY         40
 
 volatile uint8_t charlie_array[6] = { 0, 0, 0, 0, 0, 0 };
 const uint8_t charlie_spin_idx[6] = { 1,4,3,2,5,6 };
@@ -252,6 +255,10 @@ void set_led(uint8_t lednum, uint8_t onoff) {
     if (onoff) PORTD |= led_order[lednum];
     else PORTD &= ~led_order[lednum];
   }
+  else if (lednum <20) {
+    if (onoff) charlie(lednum-15);
+    else charlie(0);
+  }
 }
 
 void fade_led(uint8_t lednum, uint8_t dimness) {
@@ -275,10 +282,10 @@ void clear_charlie_array(void) {
   for (uint8_t i=0; i<6; i++) charlie_array[i] = 0;
 }
 
-void pulsate(uint8_t * step_counter, uint32_t * next_step_time) {
+uint8_t pulsate(uint8_t * step_counter, uint32_t * next_step_time) {
   //step_counter is which frame of the animation is next
   //next_step_time needs to be reset so main knows when to next execute this function
-  if (get_time() < *next_step_time) return;
+  if (get_time() < *next_step_time) return 0;
   else {
     if ((TIMSK1 & 1<<OCIE1A) == 0) {
       TIMSK1 |= 1<<OCIE1A;
@@ -286,7 +293,7 @@ void pulsate(uint8_t * step_counter, uint32_t * next_step_time) {
       clear_charlie_array();
     }
     for (uint8_t i=0; i<16; i++) fade_led(i,logscale[*step_counter]);
-    if (++(*step_counter) >= 18) *step_counter = 0;
+    if (++(*step_counter) >= 18) return 1;
     *next_step_time = get_time() + PULSATE_DELAY;
   }
   if (get_time() > charlie_timer) {
@@ -349,6 +356,16 @@ void pew(uint8_t * left_counter, uint32_t * left_next_step_time, uint8_t * right
   }
 }
 
+uint8_t sparkle(uint8_t * step, uint32_t * next_step_time) {
+  if (get_time() < *next_step_time) return 0;
+  *next_step_time = get_time() + SPARKLE_DELAY;
+
+  if (*step > 0) set_led(sparkle_rando[(*step)-1], 0);
+  if (++*step < 21) set_led(sparkle_rando[*step], 1);
+  else return 1;
+  return 0;
+}
+
 void clean_slate(void) {
   //Set all IO back to initialization
   TIMSK1 &= ~(1<<OCIE1A); //Stop the LED scanning timer
@@ -371,7 +388,7 @@ void advance_state(uint8_t newstate) {
   
   if (newstate) state = newstate;
   else ++state;
-  if (state > STATE_PEW) state = STATE_POST;
+  if (state > STATE_SPARKLE) state = STATE_POST;
   
   switch(state) {
     case STATE_NOSTATE:
@@ -383,7 +400,9 @@ void advance_state(uint8_t newstate) {
       break;
     case STATE_PEW:
       init_pew(&counter, &counter2);      
-      break;    
+      break;
+    case STATE_SPARKLE:
+      break;   
   };
 }
 
@@ -406,7 +425,7 @@ int main(void)
     dmatrix[i] = 0;
   }
   
-  advance_state(STATE_PEW);
+  advance_state(STATE_SPARKLE);
 
   init_timers();
   sei();
@@ -422,11 +441,20 @@ int main(void)
           post(&wait_until);
         break;
       case STATE_FADE:
-        pulsate(&counter, &wait_until);
+        if (pulsate(&counter, &wait_until)) {
+          if (++counter2 > 5) advance_state(0);
+          else counter = 0;
+        }
         break;
       case STATE_PEW:
         //pulsate(&counter, &wait_until);
         pew(&counter, &wait_until, &counter2, &wait_until2);
+        break;
+      case STATE_SPARKLE:
+        if (sparkle(&counter, &wait_until)) {
+          if (++counter2 > 5) advance_state(0);
+          else counter = 0;
+        }
         break;
     };
     
