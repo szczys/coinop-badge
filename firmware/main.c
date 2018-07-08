@@ -57,13 +57,14 @@ const uint8_t led_order[16] = { PEWLEFTOUT1, PEWLEFTOUT2, PEWLEFTOUT3, \
 const uint8_t scan_order[16] = { 0,1,2,3,4,5,3,4,5,0,1,2,0,2,3,5 };
 const uint8_t pwm_distribution[16] = { 0, 8, 4, 12, 1, 9, 5, 13, 2, 10, 6, 14, 3, 7, 11, 15 };
 const uint8_t logscale[18] = { 1,2,3,4,5,6,7,10,14, 16, 14, 10, 7, 6, 5, 4, 3, 2 };
-const uint8_t sparkle_rando[20] = { 6, 14,  8,  0,  4,  3, 17,  9,  2, 19,  5, 11, 13, 18, 12,  7, 10, 15, 16,  1 };
+const uint8_t sparkle_rando[22] = {18,2,0,14,4,5,3,15,10,13,6,17,11,8,21,9,19,16,12,1,20,7};
 
+#define POST_DELAY          400
 #define PULSATE_DELAY       40
 #define CHARLIE_SPIN_DELAY  120
 #define PEW_MAX             8
 #define PEW_DELAY           80
-#define SPARKLE_DELAY         40
+#define SPARKLE_DELAY       40
 
 volatile uint8_t charlie_array[6] = { 0, 0, 0, 0, 0, 0 };
 const uint8_t charlie_spin_idx[6] = { 1,4,3,2,5,6 };
@@ -190,42 +191,20 @@ void charlie(uint8_t led_num) {
   };
 }
 
-void post(uint32_t * next_step_time) {
-  if (get_time() < *next_step_time) return;
+uint8_t post(uint8_t * step, uint32_t * next_step_time) {
+  if (get_time() < *next_step_time) return 0;
 
-  *next_step_time = get_time() + 100;
-  static uint8_t post_tracker = 0;
+  *next_step_time = get_time() + POST_DELAY;
   PORTB &= ~(OUT_MASK_B);
   PORTC &= ~(OUT_MASK_C);
   CHARLIE_DDR &= ~(CHARLIE_MASK);
   CHARLIE_PORT &= ~(OUT_MASK_D | CHARLIE_MASK);
 
-  if (post_tracker > 22) {
-    post_tracker = 0;
-    advance_state(0);
-    return;
-  }
+  if (*step > 21) return 1;
 
-  switch(post_tracker++) {
-    case 0: PORTB |= PEWLEFTOUT1; break;
-    case 1: PORTB |= PEWLEFTOUT2; break;
-    case 2: PORTB |= PEWLEFTOUT3; break;
-    case 3: PORTB |= PEWLEFTIN1; break;
-    case 4: PORTB |= PEWLEFTIN2; break;
-    case 5: PORTB |= PEWLEFTIN3; break;
-    case 6: PORTB |= PEWRIGHTIN1; break;
-    case 7: PORTB |= PEWRIGHTIN2; break;
-    case 8: PORTC |= PEWRIGHTIN3; break;
-    case 9: PORTC |= PEWRIGHTOUT1; break;
-    case 10: PORTC |= PEWRIGHTOUT2; break;
-    case 11: PORTC |= PEWRIGHTOUT3; break;
-    case 12: PORTD |= SHIELDLEFTOUT; break;
-    case 13: PORTD |= SHIELDLEFTIN; break;
-    case 14: PORTD |= SHIELDRIGHTIN; break;
-    case 15: PORTD |= SHIELDRIGHTOUT; break;
-    //Hack to run charlie([1:6]);
-    default: charlie(post_tracker-16); break; // (16 because we already incremented)
-    };
+  set_led(*step, 1);
+  *step += 1;
+  return 0;
 }
 
 void sleep_my_pretty(void) {
@@ -255,7 +234,7 @@ void set_led(uint8_t lednum, uint8_t onoff) {
     if (onoff) PORTD |= led_order[lednum];
     else PORTD &= ~led_order[lednum];
   }
-  else if (lednum <20) {
+  else if (lednum <22) {
     if (onoff) charlie(lednum-15);
     else charlie(0);
   }
@@ -360,8 +339,8 @@ uint8_t sparkle(uint8_t * step, uint32_t * next_step_time) {
   if (get_time() < *next_step_time) return 0;
   *next_step_time = get_time() + SPARKLE_DELAY;
 
-  if (*step > 0) set_led(sparkle_rando[(*step)-1], 0);
-  if (++*step < 21) set_led(sparkle_rando[*step], 1);
+  if (*step > 0) set_led(sparkle_rando[*step-1], 0);
+  if (++*step < 23) set_led(sparkle_rando[*step], 1);
   else return 1;
   return 0;
 }
@@ -425,7 +404,7 @@ int main(void)
     dmatrix[i] = 0;
   }
   
-  advance_state(STATE_SPARKLE);
+  advance_state(STATE_POST);
 
   init_timers();
   sei();
@@ -438,7 +417,7 @@ int main(void)
       case STATE_NOSTATE:
         break;
       case STATE_POST:         
-          post(&wait_until);
+          if (post(&counter, &wait_until)) advance_state(0);
         break;
       case STATE_FADE:
         if (pulsate(&counter, &wait_until)) {
