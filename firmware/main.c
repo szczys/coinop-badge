@@ -485,8 +485,10 @@ int main(void)
     };
     
     if(get_key_press(KEY1)) {
-     if (state == STATE_NOSTATE) init_pew(0,&counter2);
+      if (state == STATE_NOSTATE) init_pew(0,&counter2);
     }
+    if(get_key_rpt(KEY1) && (state == STATE_NOSTATE)) advance_state();
+
     if(get_key_press(KEY0)) {
       if (state == STATE_NOSTATE) init_pew(&counter,0);
       else sleep_my_pretty();
