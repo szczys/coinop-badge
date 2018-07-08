@@ -50,6 +50,9 @@ const uint8_t scan_order[16] = { 0,1,2,3,4,5,3,4,5,0,1,2,0,2,3,5 };
 const uint8_t pwm_distribution[16] = { 0, 8, 4, 12, 1, 9, 5, 13, 2, 10, 6, 14, 3, 7, 11, 15 };
 const uint8_t logscale[18] = { 1,2,3,4,5,6,7,10,14, 16, 14, 10, 7, 6, 5, 4, 3, 2 };
 
+#define PULSATE_DELAY       40
+#define CHARLIE_SPIN_DELAY  120
+
 volatile uint8_t charlie_array[6] = { 0, 0, 0, 0, 0, 0 };
 const uint8_t charlie_spin_idx[6] = { 1,4,3,2,5,6 };
 
@@ -77,8 +80,9 @@ volatile unsigned char key_state;
 volatile unsigned char key_rpt;
 /************************************************************/
 
-//Used for upcounting milliseconds
-volatile uint32_t ticks;
+volatile uint32_t ticks; //Used for upcounting milliseconds
+uint32_t wait_until = 0;
+uint32_t charlie_timer = 0;
 
 void Delay_ms(int cnt) {
 	while (cnt-->0) {
@@ -307,7 +311,7 @@ void set_led(uint8_t lednum, uint8_t onoff) {
 }
 
 void fade_led(uint8_t lednum, uint8_t dimness) {
-  uint8_t * dimarray;
+  volatile uint8_t * dimarray;
   if (lednum < 8) dimarray = bmatrix;
   else if (lednum < 12) dimarray = cmatrix;
   else if (lednum < 16) dimarray = dmatrix;
@@ -327,11 +331,35 @@ void clear_charlie_array(void) {
   for (uint8_t i=0; i<6; i++) charlie_array[i] = 0;
 }
 
+void pulsate(uint8_t * step_counter, uint32_t * next_step_time) {
+  //step_counter is which frame of the animation is next
+  //next_step_time needs to be reset so main knows when to next execute this function
+  if (get_time() < *next_step_time) return;
+  else {
+    if ((TIMSK1 & 1<<OCIE1A) == 0) {
+      TIMSK1 |= 1<<OCIE1A;
+      *step_counter = 0;
+      clear_charlie_array();
+    }
+    for (uint8_t i=0; i<16; i++) fade_led(i,logscale[*step_counter]);
+    if (++(*step_counter) >= 18) *step_counter = 0;
+    *next_step_time = get_time() + PULSATE_DELAY;
+  }
+  if (get_time() > charlie_timer) {
+    static uint8_t charlie_spin = 0;
+    charlie_timer = get_time() + CHARLIE_SPIN_DELAY;
+    charlie_array[0] = charlie_spin_idx[charlie_spin];
+    charlie_array[4] = charlie_spin_idx[charlie_spin+3];
+    if (++charlie_spin > 2) charlie_spin = 0;
+  }
+}
+
 int main(void)
 {
   ticks = 0;
   state = STATE_POST;
-  static uint32_t wait_until = 0;
+  wait_until = 0;
+  charlie_timer = 0;
   init_io();
   
   
@@ -348,28 +376,12 @@ int main(void)
   for (uint8_t i=0; i<16; i++) fade_led(i,16);
 
   uint8_t counter = 0;
-  uint32_t charlie_timer = 0;
+
   while(1)
   {
     switch(state) {
       case STATE_NOSTATE:
-        if (get_time() > wait_until) {
-          if ((TIMSK1 & 1<<OCIE1A) == 0) {
-            TIMSK1 |= 1<<OCIE1A;
-            counter = 0;
-            clear_charlie_array();
-          }
-          for (uint8_t i=0; i<16; i++) fade_led(i,logscale[counter]);
-          if (++counter >= 18) counter = 0;
-          wait_until = get_time() + 40;
-        }
-        if (get_time() > charlie_timer) {
-          static uint8_t charlie_spin = 0;
-          charlie_timer = get_time() + 120;
-          charlie_array[0] = charlie_spin_idx[charlie_spin];
-          charlie_array[4] = charlie_spin_idx[charlie_spin+3];
-          if (++charlie_spin > 2) charlie_spin = 0;
-        }
+        pulsate(&counter, &wait_until);
         break;
       case STATE_POST:
         if (get_time() > wait_until) {
