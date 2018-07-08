@@ -52,6 +52,8 @@ const uint8_t logscale[18] = { 1,2,3,4,5,6,7,10,14, 16, 14, 10, 7, 6, 5, 4, 3, 2
 
 #define PULSATE_DELAY       40
 #define CHARLIE_SPIN_DELAY  120
+#define PEW_MAX             7
+#define PEW_DELAY           80
 
 volatile uint8_t charlie_array[6] = { 0, 0, 0, 0, 0, 0 };
 const uint8_t charlie_spin_idx[6] = { 1,4,3,2,5,6 };
@@ -82,6 +84,7 @@ volatile unsigned char key_rpt;
 
 volatile uint32_t ticks; //Used for upcounting milliseconds
 uint32_t wait_until = 0;
+uint32_t wait_until2 = 0;
 uint32_t charlie_timer = 0;
 
 void Delay_ms(int cnt) {
@@ -297,16 +300,16 @@ void sleep_my_pretty(void) {
 
 void set_led(uint8_t lednum, uint8_t onoff) {
   if (lednum < 8) {
-    if (onoff) bmatrix[scan_order[lednum]] |= led_order[lednum];
-    else bmatrix[scan_order[lednum]] &= ~led_order[lednum];
+    if (onoff) PORTB |= led_order[lednum];
+    else PORTB &= ~led_order[lednum];
   }
   else if (lednum < 12) {
-    if (onoff) cmatrix[scan_order[lednum]] |= led_order[lednum];
-    else cmatrix[scan_order[lednum]] &= ~led_order[lednum];
+    if (onoff) PORTC |= led_order[lednum];
+    else PORTC &= ~led_order[lednum];
   }
   else if (lednum < 16) {
-    if (onoff) dmatrix[scan_order[lednum]] |= led_order[lednum];
-    else dmatrix[scan_order[lednum]] &= ~led_order[lednum];
+    if (onoff) PORTD |= led_order[lednum];
+    else PORTD &= ~led_order[lednum];
   }
 }
 
@@ -354,12 +357,62 @@ void pulsate(uint8_t * step_counter, uint32_t * next_step_time) {
   }
 }
 
+void init_pew(uint8_t * left_counter, uint8_t * right_counter) {
+  //*left_counter = PEW_MAX;
+  if (&left_counter > 0) {
+    *left_counter = PEW_MAX;
+    for (uint8_t i=0; i<6; i++) set_led(i,0);
+  }
+  if (&right_counter > 0) {
+    *right_counter = PEW_MAX;
+    for (uint8_t i=6; i<12; i++) set_led(i,0);
+  }
+}
+
+void pew(uint8_t * left_counter, uint32_t * left_next_step_time, uint8_t * right_counter, uint32_t * right_next_step_time) {
+  //set up callback timers
+  uint32_t next = get_time() + PEW_DELAY;
+  if (*left_counter > 0) {
+    if (get_time() > *left_next_step_time) {
+      *left_next_step_time = next;
+
+      switch(*left_counter) {
+        case 7: set_led(2,1); --*left_counter; break;
+        case 6: set_led(2,0); set_led(1,1); --*left_counter; break;
+        case 5: set_led(1,0); set_led(0,1); --*left_counter; break;
+        case 4: set_led(0,0); set_led(5,1); --*left_counter; break;
+        case 3: set_led(5,0); set_led(4,1); --*left_counter; break;
+        case 2: set_led(4,0); set_led(3,1); --*left_counter; break;
+        case 1: set_led(3,0); --*left_counter; break;
+      };
+    }
+  }
+  if (*right_counter > 0) {
+    if (get_time() > *right_next_step_time) {
+      *right_next_step_time = next;
+
+      switch(*right_counter) {
+        case 7: set_led(11,1); --*right_counter; break;
+        case 6: set_led(11,0); set_led(10,1); --*right_counter; break;
+        case 5: set_led(10,0); set_led(9,1); --*right_counter; break;
+        case 4: set_led(9,0); set_led(8,1); --*right_counter; break;
+        case 3: set_led(8,0); set_led(7,1); --*right_counter; break;
+        case 2: set_led(7,0); set_led(6,1); --*right_counter; break;
+        case 1: set_led(6,0); --*right_counter; break;
+      };
+    }
+  }
+}
+
 int main(void)
 {
   ticks = 0;
   state = STATE_POST;
   wait_until = 0;
+  wait_until2 = 0;
   charlie_timer = 0;
+  uint8_t counter = 0;
+  uint8_t counter2 = 0;
   init_io();
   
   
@@ -375,26 +428,29 @@ int main(void)
 
   for (uint8_t i=0; i<16; i++) fade_led(i,16);
 
-  uint8_t counter = 0;
-
   while(1)
   {
     switch(state) {
       case STATE_NOSTATE:
-        pulsate(&counter, &wait_until);
+        //pulsate(&counter, &wait_until);
+        pew(&counter, &wait_until, &counter2, &wait_until2);
         break;
       case STATE_POST:
         if (get_time() > wait_until) {
           wait_until = get_time() + 100;
           post();
         }
+        if (state == STATE_NOSTATE) init_pew(&counter, &counter2);
         break;
     };
     
     if(get_key_press(KEY1)) {
+      /*
       state = STATE_POST;
       TIMSK1 &= ~(1<<OCIE1A);
       wait_until = 0;
+      */
+      init_pew(&counter,&counter2);
     }
     if(get_key_press(KEY0)) sleep_my_pretty();
   }
