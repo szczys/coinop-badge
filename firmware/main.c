@@ -485,14 +485,12 @@ int main(void)
     };
     
     if(get_key_press(KEY1)) {
-      /*
-      state = STATE_POST;
-      TIMSK1 &= ~(1<<OCIE1A);
-      wait_until = 0;
-      */
-      init_pew(&counter,&counter2);
+     if (state == STATE_NOSTATE) init_pew(0,&counter2);
     }
-    if(get_key_press(KEY0)) sleep_my_pretty();
+    if(get_key_press(KEY0)) {
+      if (state == STATE_NOSTATE) init_pew(&counter,0);
+      else sleep_my_pretty();
+    }
   }
 }
 
