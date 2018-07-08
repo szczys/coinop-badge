@@ -7,10 +7,14 @@
 
 void Delay_ms(int cnt);
 
-#define STATE_NOSTATE     0
-#define STATE_POST        1
-#define STATE_FADE        2
-#define STATE_PEW         3
+#define STATE_NOSTATE       0
+#define STATE_CONFIRMSLEEP  1
+#define STATE_CONFIRMWAKE   2
+#define STATE_ASLEEP        3
+#define STATE_POST          4
+#define STATE_FADE          5
+#define STATE_PEW           6
+
 uint8_t state;
 
 #define PEWLEFTIN1        (1<<PB0)
@@ -55,7 +59,7 @@ const uint8_t logscale[18] = { 1,2,3,4,5,6,7,10,14, 16, 14, 10, 7, 6, 5, 4, 3, 2
 
 #define PULSATE_DELAY       40
 #define CHARLIE_SPIN_DELAY  120
-#define PEW_MAX             7
+#define PEW_MAX             8
 #define PEW_DELAY           80
 
 volatile uint8_t charlie_array[6] = { 0, 0, 0, 0, 0, 0 };
@@ -120,7 +124,7 @@ void init_timers(void) {
   TIMSK0 = 1<<TOIE0;		//enable overflow interrupt
 
   TCCR1B = 1<<WGM12 | 1<<CS11 | 1<<CS10;  //CTC mode with prescaler of 64
-  OCR1AL = 20; // 1 kHz
+  OCR1AL = 20; // 6.2 kHz
   //TIMSK1 |= 1<<OCIE1A;
 
 }
@@ -183,7 +187,10 @@ void charlie(uint8_t led_num) {
   };
 }
 
-void post(void) {
+void post(uint32_t * next_step_time) {
+  if (get_time() < *next_step_time) return;
+
+  *next_step_time = get_time() + 100;
   static uint8_t post_tracker = 0;
   PORTB &= ~(OUT_MASK_B);
   PORTC &= ~(OUT_MASK_C);
@@ -192,7 +199,7 @@ void post(void) {
 
   if (post_tracker > 22) {
     post_tracker = 0;
-    state = STATE_NOSTATE;
+    advance_state(0);
     return;
   }
 
@@ -311,14 +318,16 @@ void pew(uint8_t * left_counter, uint32_t * left_next_step_time, uint8_t * right
       *left_next_step_time = next;
 
       switch(*left_counter) {
-        case 7: set_led(2,1); --*left_counter; break;
-        case 6: set_led(2,0); set_led(1,1); --*left_counter; break;
-        case 5: set_led(1,0); set_led(0,1); --*left_counter; break;
-        case 4: set_led(0,0); set_led(5,1); --*left_counter; break;
-        case 3: set_led(5,0); set_led(4,1); --*left_counter; break;
-        case 2: set_led(4,0); set_led(3,1); --*left_counter; break;
-        case 1: set_led(3,0); --*left_counter; break;
+        case 8: set_led(2,1); break;
+        case 7: set_led(2,0); set_led(1,1); break;
+        case 6: set_led(1,0); set_led(0,1); break;
+        case 5: set_led(0,0);  *left_next_step_time += PEW_DELAY; break;
+        case 4: set_led(5,1); break;
+        case 3: set_led(5,0); set_led(4,1); break;
+        case 2: set_led(4,0); set_led(3,1); break;
+        case 1: set_led(3,0); break;
       };
+      --*left_counter;
     }
   }
   if (*right_counter > 0) {
@@ -326,14 +335,16 @@ void pew(uint8_t * left_counter, uint32_t * left_next_step_time, uint8_t * right
       *right_next_step_time = next;
 
       switch(*right_counter) {
-        case 7: set_led(11,1); --*right_counter; break;
-        case 6: set_led(11,0); set_led(10,1); --*right_counter; break;
-        case 5: set_led(10,0); set_led(9,1); --*right_counter; break;
-        case 4: set_led(9,0); set_led(8,1); --*right_counter; break;
-        case 3: set_led(8,0); set_led(7,1); --*right_counter; break;
-        case 2: set_led(7,0); set_led(6,1); --*right_counter; break;
-        case 1: set_led(6,0); --*right_counter; break;
+        case 8: set_led(11,1); break;
+        case 7: set_led(11,0); set_led(10,1); break;
+        case 6: set_led(10,0); set_led(9,1); break;
+        case 5: set_led(9,0);  *right_next_step_time += PEW_DELAY; break;
+        case 4: set_led(8,1); break;
+        case 3: set_led(8,0); set_led(7,1); break;
+        case 2: set_led(7,0); set_led(6,1); break;
+        case 1: set_led(6,0); break;
       };
+      --*right_counter;
     }
   }
 }
@@ -345,6 +356,8 @@ void clean_slate(void) {
   PORTB &= ~OUT_MASK_B;
   PORTC &= ~OUT_MASK_C;
   PORTD &= ~OUT_MASK_D;
+  //Shut down Charlieplex
+  charlie(0);
   //Reset counters and wait times
   wait_until = 0;
   wait_until2 = 0;
@@ -352,24 +365,24 @@ void clean_slate(void) {
   counter2 = 0;
 }
 
-void advance_state(void) {
+void advance_state(uint8_t newstate) {
+  // If newstate == 0 just increment the state
   clean_slate();
-
+  
+  if (newstate) state = newstate;
+  else ++state;
+  if (state > STATE_PEW) state = STATE_POST;
+  
   switch(state) {
     case STATE_NOSTATE:
-      ++state;
       break;
     case STATE_POST:
-      TIMSK1 |= 1<<OCIE1A;
-      ++state;
       break;
     case STATE_FADE:
-      init_pew(&counter, &counter2);
-      ++state;
+      TIMSK1 |= 1<<OCIE1A;
       break;
     case STATE_PEW:
-      state = 0;
-      
+      init_pew(&counter, &counter2);      
       break;    
   };
 }
@@ -392,6 +405,8 @@ int main(void)
     cmatrix[i] = 0;
     dmatrix[i] = 0;
   }
+  
+  advance_state(STATE_PEW);
 
   init_timers();
   sei();
@@ -402,27 +417,28 @@ int main(void)
   {
     switch(state) {
       case STATE_NOSTATE:
+        break;
+      case STATE_POST:         
+          post(&wait_until);
+        break;
+      case STATE_FADE:
+        pulsate(&counter, &wait_until);
+        break;
+      case STATE_PEW:
         //pulsate(&counter, &wait_until);
         pew(&counter, &wait_until, &counter2, &wait_until2);
         break;
-      case STATE_POST:
-        if (get_time() > wait_until) {
-          wait_until = get_time() + 100;
-          post();
-        }
-        if (state == STATE_NOSTATE) init_pew(&counter, &counter2);
-        break;
     };
     
-    if(get_key_press(KEY1)) {
-      if (state == STATE_NOSTATE) init_pew(0,&counter2);
+    if(get_key_short(KEY1)) {
+      if (state == STATE_PEW) init_pew(0,&counter2);
     }
-    if(get_key_rpt(KEY1) && (state == STATE_NOSTATE)) advance_state();
+    if(get_key_rpt(KEY1)) advance_state(0);
 
-    if(get_key_press(KEY0)) {
-      if (state == STATE_NOSTATE) init_pew(&counter,0);
-      else sleep_my_pretty();
+    if(get_key_short(KEY0)) {
+      if (state == STATE_PEW) init_pew(&counter,0);
     }
+    if(get_key_rpt(KEY0)) sleep_my_pretty();
   }
 }
 
