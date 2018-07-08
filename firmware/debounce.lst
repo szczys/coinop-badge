@@ -1,0 +1,282 @@
+   1               		.file	"debounce.c"
+   2               	__SP_H__ = 0x3e
+   3               	__SP_L__ = 0x3d
+   4               	__SREG__ = 0x3f
+   5               	__tmp_reg__ = 0
+   6               	__zero_reg__ = 1
+   9               		.text
+  10               	.Ltext0:
+ 106               	.global	get_key_press
+ 108               	get_key_press:
+ 109               		.stabd	46,0,0
+   1:debounce.c    **** #include <avr/io.h>
+   2:debounce.c    **** #include <avr/interrupt.h>
+   3:debounce.c    **** #include "debounce.h"
+   4:debounce.c    **** 
+   5:debounce.c    **** /*--------------------------------------------------------------------------
+   6:debounce.c    ****   FUNC: 8/1/11 - Used to read debounced button presses
+   7:debounce.c    ****   PARAMS: A keymask corresponding to the pin for the button you with to poll
+   8:debounce.c    ****   RETURNS: A keymask where any high bits represent a button press
+   9:debounce.c    **** --------------------------------------------------------------------------*/
+  10:debounce.c    **** unsigned char get_key_press( unsigned char key_mask )
+  11:debounce.c    **** {
+ 111               	.LM0:
+ 112               	.LFBB1:
+ 113               	/* prologue: function */
+ 114               	/* frame size = 0 */
+ 115               	/* stack size = 0 */
+ 116               	.L__stack_usage = 0
+  12:debounce.c    ****   cli();			// read and clear atomic !
+ 118               	.LM1:
+ 119               	/* #APP */
+ 120               	 ;  12 "debounce.c" 1
+ 121 0000 F894      		cli
+ 122               	 ;  0 "" 2
+  13:debounce.c    ****   key_mask &= key_press;	// read key(s)
+ 124               	.LM2:
+ 125               	/* #NOAPP */
+ 126 0002 9091 0000 		lds r25,key_press
+ 127 0006 8923      		and r24,r25
+  14:debounce.c    ****   key_press ^= key_mask;	// clear key(s)
+ 129               	.LM3:
+ 130 0008 9091 0000 		lds r25,key_press
+ 131 000c 9827      		eor r25,r24
+ 132 000e 9093 0000 		sts key_press,r25
+  15:debounce.c    ****   sei();
+ 134               	.LM4:
+ 135               	/* #APP */
+ 136               	 ;  15 "debounce.c" 1
+ 137 0012 7894      		sei
+ 138               	 ;  0 "" 2
+  16:debounce.c    ****   return key_mask;
+  17:debounce.c    **** }
+ 140               	.LM5:
+ 141               	/* #NOAPP */
+ 142 0014 0895      		ret
+ 144               	.Lscope1:
+ 146               		.stabd	78,0,0
+ 149               	.global	get_key_rpt
+ 151               	get_key_rpt:
+ 152               		.stabd	46,0,0
+  18:debounce.c    **** 
+  19:debounce.c    **** /*--------------------------------------------------------------------------
+  20:debounce.c    ****   FUNC: 8/1/11 - Used to check for debounced buttons that are held down
+  21:debounce.c    ****   PARAMS: A keymask corresponding to the pin for the button you with to poll
+  22:debounce.c    ****   RETURNS: A keymask where any high bits is a button held long enough for
+  23:debounce.c    **** 		its input to be repeated
+  24:debounce.c    **** --------------------------------------------------------------------------*/
+  25:debounce.c    **** unsigned char get_key_rpt( unsigned char key_mask ) 
+  26:debounce.c    **** { 
+ 154               	.LM6:
+ 155               	.LFBB2:
+ 156               	/* prologue: function */
+ 157               	/* frame size = 0 */
+ 158               	/* stack size = 0 */
+ 159               	.L__stack_usage = 0
+  27:debounce.c    ****   cli();               // read and clear atomic ! 
+ 161               	.LM7:
+ 162               	/* #APP */
+ 163               	 ;  27 "debounce.c" 1
+ 164 0016 F894      		cli
+ 165               	 ;  0 "" 2
+  28:debounce.c    ****   key_mask &= key_rpt;                           // read key(s) 
+ 167               	.LM8:
+ 168               	/* #NOAPP */
+ 169 0018 9091 0000 		lds r25,key_rpt
+ 170 001c 8923      		and r24,r25
+  29:debounce.c    ****   key_rpt ^= key_mask;                           // clear key(s) 
+ 172               	.LM9:
+ 173 001e 9091 0000 		lds r25,key_rpt
+ 174 0022 9827      		eor r25,r24
+ 175 0024 9093 0000 		sts key_rpt,r25
+  30:debounce.c    ****   sei(); 
+ 177               	.LM10:
+ 178               	/* #APP */
+ 179               	 ;  30 "debounce.c" 1
+ 180 0028 7894      		sei
+ 181               	 ;  0 "" 2
+  31:debounce.c    ****   return key_mask; 
+  32:debounce.c    **** } 
+ 183               	.LM11:
+ 184               	/* #NOAPP */
+ 185 002a 0895      		ret
+ 187               	.Lscope2:
+ 189               		.stabd	78,0,0
+ 192               	.global	get_key_short
+ 194               	get_key_short:
+ 195               		.stabd	46,0,0
+  33:debounce.c    **** 
+  34:debounce.c    **** /*--------------------------------------------------------------------------
+  35:debounce.c    ****   FUNC: 8/1/11 - Used to read debounced button released after a short press
+  36:debounce.c    ****   PARAMS: A keymask corresponding to the pin for the button you with to poll
+  37:debounce.c    ****   RETURNS: A keymask where any high bits represent a quick press and release
+  38:debounce.c    **** --------------------------------------------------------------------------*/
+  39:debounce.c    **** unsigned char get_key_short( unsigned char key_mask ) 
+  40:debounce.c    **** { 
+ 197               	.LM12:
+ 198               	.LFBB3:
+ 199               	/* prologue: function */
+ 200               	/* frame size = 0 */
+ 201               	/* stack size = 0 */
+ 202               	.L__stack_usage = 0
+  41:debounce.c    ****   cli();         // read key state and key press atomic ! 
+ 204               	.LM13:
+ 205               	/* #APP */
+ 206               	 ;  41 "debounce.c" 1
+ 207 002c F894      		cli
+ 208               	 ;  0 "" 2
+  42:debounce.c    ****   return get_key_press( ~key_state & key_mask ); 
+ 210               	.LM14:
+ 211               	/* #NOAPP */
+ 212 002e 9091 0000 		lds r25,key_state
+ 213 0032 9095      		com r25
+ 214 0034 8923      		and r24,r25
+ 215 0036 00C0      		rjmp get_key_press
+ 217               	.Lscope3:
+ 219               		.stabd	78,0,0
+ 222               	.global	get_key_long
+ 224               	get_key_long:
+ 225               		.stabd	46,0,0
+  43:debounce.c    **** } 
+  44:debounce.c    **** 
+  45:debounce.c    **** /*--------------------------------------------------------------------------
+  46:debounce.c    ****   FUNC: 8/1/11 - Used to read debounced button held for REPEAT_START amount
+  47:debounce.c    **** 	of time.
+  48:debounce.c    ****   PARAMS: A keymask corresponding to the pin for the button you with to poll
+  49:debounce.c    ****   RETURNS: A keymask where any high bits represent a long button press
+  50:debounce.c    **** --------------------------------------------------------------------------*/
+  51:debounce.c    **** unsigned char get_key_long( unsigned char key_mask ) 
+  52:debounce.c    **** { 
+ 227               	.LM15:
+ 228               	.LFBB4:
+ 229               	/* prologue: function */
+ 230               	/* frame size = 0 */
+ 231               	/* stack size = 0 */
+ 232               	.L__stack_usage = 0
+  53:debounce.c    ****   return get_key_press( get_key_rpt( key_mask )); 
+ 234               	.LM16:
+ 235 0038 00D0      		rcall get_key_rpt
+ 236 003a 00C0      		rjmp get_key_press
+ 238               	.Lscope4:
+ 240               		.stabd	78,0,0
+ 242               	.global	key_isr
+ 244               	key_isr:
+ 245               		.stabd	46,0,0
+  54:debounce.c    **** } 
+  55:debounce.c    **** 
+  56:debounce.c    **** /*--------------------------------------------------------------------------
+  57:debounce.c    ****   FUNC: 7/8/18 - Used to debounce buttons in an interrupt service routine
+  58:debounce.c    **** 	that runs once every 10 milliseconds
+  59:debounce.c    ****   PARAMS: None
+  60:debounce.c    ****   RETURNS: None
+  61:debounce.c    **** --------------------------------------------------------------------------*/
+  62:debounce.c    **** void key_isr( void )
+  63:debounce.c    **** { 
+ 247               	.LM17:
+ 248               	.LFBB5:
+ 249               	/* prologue: function */
+ 250               	/* frame size = 0 */
+ 251               	/* stack size = 0 */
+ 252               	.L__stack_usage = 0
+  64:debounce.c    ****   static unsigned char ct0, ct1, rpt;  
+  65:debounce.c    ****   unsigned char i;
+  66:debounce.c    ****   i = key_state ^ KEY_PIN;    // key changed ? (natural state is high so no need for ~KEY_PIN
+ 254               	.LM18:
+ 255 003c 26B1      		in r18,0x6
+ 256 003e 8091 0000 		lds r24,key_state
+ 257 0042 2827      		eor r18,r24
+  67:debounce.c    ****   ct0 = ~( ct0 & i );          // reset or count ct0
+ 259               	.LM19:
+ 260 0044 9091 0000 		lds r25,ct0.1629
+ 261 0048 9223      		and r25,r18
+ 262 004a 892F      		mov r24,r25
+ 263 004c 8095      		com r24
+ 264 004e 8093 0000 		sts ct0.1629,r24
+  68:debounce.c    ****   ct1 = ct0 ^ (ct1 & i);       // reset or count ct1
+ 266               	.LM20:
+ 267 0052 9091 0000 		lds r25,ct1.1630
+ 268 0056 9223      		and r25,r18
+ 269 0058 9827      		eor r25,r24
+ 270 005a 9093 0000 		sts ct1.1630,r25
+ 271 005e 8223      		and r24,r18
+  69:debounce.c    ****   i &= ct0 & ct1;              // count until roll over ?
+ 273               	.LM21:
+ 274 0060 8923      		and r24,r25
+  70:debounce.c    ****   key_state ^= i;              // then toggle debounced state
+ 276               	.LM22:
+ 277 0062 9091 0000 		lds r25,key_state
+ 278 0066 9827      		eor r25,r24
+ 279 0068 9093 0000 		sts key_state,r25
+  71:debounce.c    ****   key_press |= key_state & i;  // 0->1: key press detect
+ 281               	.LM23:
+ 282 006c 2091 0000 		lds r18,key_state
+ 283 0070 9091 0000 		lds r25,key_press
+ 284 0074 8223      		and r24,r18
+ 285 0076 892B      		or r24,r25
+ 286 0078 8093 0000 		sts key_press,r24
+  72:debounce.c    **** 
+  73:debounce.c    ****   if( (key_state & REPEAT_MASK) == 0 )   // check repeat function 
+ 288               	.LM24:
+ 289 007c 8091 0000 		lds r24,key_state
+ 290 0080 8370      		andi r24,lo8(3)
+ 291 0082 01F4      		brne .L6
+  74:debounce.c    ****      rpt = REPEAT_START;      // start delay 
+ 293               	.LM25:
+ 294 0084 82E3      		ldi r24,lo8(50)
+ 295 0086 8093 0000 		sts rpt.1631,r24
+ 296               	.L6:
+  75:debounce.c    ****   if( --rpt == 0 ){ 
+ 298               	.LM26:
+ 299 008a 8091 0000 		lds r24,rpt.1631
+ 300 008e 8150      		subi r24,lo8(-(-1))
+ 301 0090 01F0      		breq .L7
+ 302 0092 8093 0000 		sts rpt.1631,r24
+ 303 0096 0895      		ret
+ 304               	.L7:
+  76:debounce.c    ****     rpt = REPEAT_NEXT;         // repeat delay 
+ 306               	.LM27:
+ 307 0098 86E4      		ldi r24,lo8(70)
+ 308 009a 8093 0000 		sts rpt.1631,r24
+  77:debounce.c    ****     key_rpt |= key_state & REPEAT_MASK; 
+ 310               	.LM28:
+ 311 009e 8091 0000 		lds r24,key_state
+ 312 00a2 9091 0000 		lds r25,key_rpt
+ 313 00a6 8370      		andi r24,lo8(3)
+ 314 00a8 892B      		or r24,r25
+ 315 00aa 8093 0000 		sts key_rpt,r24
+ 316 00ae 0895      		ret
+ 323               	.Lscope5:
+ 325               		.stabd	78,0,0
+ 326               		.local	rpt.1631
+ 327               		.comm	rpt.1631,1,1
+ 328               		.local	ct1.1630
+ 329               		.comm	ct1.1630,1,1
+ 330               		.local	ct0.1629
+ 331               		.comm	ct0.1629,1,1
+ 332               		.comm	key_rpt,1,1
+ 333               		.comm	key_state,1,1
+ 334               		.comm	key_press,1,1
+ 339               	.Letext0:
+ 340               		.ident	"GCC: (GNU) 5.4.0"
+ 341               	.global __do_clear_bss
+DEFINED SYMBOLS
+                            *ABS*:0000000000000000 debounce.c
+     /tmp/cccvPNQ7.s:2      *ABS*:000000000000003e __SP_H__
+     /tmp/cccvPNQ7.s:3      *ABS*:000000000000003d __SP_L__
+     /tmp/cccvPNQ7.s:4      *ABS*:000000000000003f __SREG__
+     /tmp/cccvPNQ7.s:5      *ABS*:0000000000000000 __tmp_reg__
+     /tmp/cccvPNQ7.s:6      *ABS*:0000000000000001 __zero_reg__
+     /tmp/cccvPNQ7.s:108    .text:0000000000000000 get_key_press
+                            *COM*:0000000000000001 key_press
+     /tmp/cccvPNQ7.s:151    .text:0000000000000016 get_key_rpt
+                            *COM*:0000000000000001 key_rpt
+     /tmp/cccvPNQ7.s:194    .text:000000000000002c get_key_short
+                            *COM*:0000000000000001 key_state
+     /tmp/cccvPNQ7.s:224    .text:0000000000000038 get_key_long
+     /tmp/cccvPNQ7.s:244    .text:000000000000003c key_isr
+     /tmp/cccvPNQ7.s:329    .bss:0000000000000002 ct0.1629
+     /tmp/cccvPNQ7.s:327    .bss:0000000000000001 ct1.1630
+                             .bss:0000000000000000 rpt.1631
+
+UNDEFINED SYMBOLS
+__do_clear_bss

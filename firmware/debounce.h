@@ -12,7 +12,7 @@
 //Debounce
 #define REPEAT_MASK   (KEY0 | KEY1)   // repeat: key1, key2 
 #define REPEAT_START   50      // after 500ms 
-#define REPEAT_NEXT   20      // every 200ms
+#define REPEAT_NEXT   70      // every 700ms
 volatile unsigned char key_press;
 volatile unsigned char key_state;
 volatile unsigned char key_rpt;
@@ -22,4 +22,4 @@ unsigned char get_key_press( unsigned char key_mask );
 unsigned char get_key_rpt( unsigned char key_mask );
 unsigned char get_key_short( unsigned char key_mask ); 
 unsigned char get_key_long( unsigned char key_mask );
-
+void key_isr( void );

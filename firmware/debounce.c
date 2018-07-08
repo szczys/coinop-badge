@@ -59,7 +59,7 @@ unsigned char get_key_long( unsigned char key_mask )
   PARAMS: None
   RETURNS: None
 --------------------------------------------------------------------------*/
-void key_isr( void ) 
+void key_isr( void )
 { 
   static unsigned char ct0, ct1, rpt;  
   unsigned char i;
