@@ -59,7 +59,7 @@ const uint8_t pwm_distribution[16] = { 0, 8, 4, 12, 1, 9, 5, 13, 2, 10, 6, 14, 3
 const uint8_t logscale[18] = { 1,2,3,4,5,6,7,10,14, 16, 14, 10, 7, 6, 5, 4, 3, 2 };
 const uint8_t sparkle_rando[22] = {18,2,0,14,4,5,3,15,10,13,6,17,11,8,21,9,19,16,12,1,20,7};
 
-#define POST_DELAY          400
+#define POST_DELAY          100
 #define PULSATE_DELAY       40
 #define CHARLIE_SPIN_DELAY  120
 #define PEW_MAX             8
@@ -340,8 +340,9 @@ uint8_t sparkle(uint8_t * step, uint32_t * next_step_time) {
   *next_step_time = get_time() + SPARKLE_DELAY;
 
   if (*step > 0) set_led(sparkle_rando[*step-1], 0);
-  if (++*step < 23) set_led(sparkle_rando[*step], 1);
+  if (*step < 22) set_led(sparkle_rando[*step], 1);
   else return 1;
+  *step += 1;
   return 0;
 }
 
@@ -426,7 +427,6 @@ int main(void)
         }
         break;
       case STATE_PEW:
-        //pulsate(&counter, &wait_until);
         pew(&counter, &wait_until, &counter2, &wait_until2);
         break;
       case STATE_SPARKLE:
