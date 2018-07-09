@@ -80,6 +80,34 @@ uint32_t charlie_timer = 0;
 uint8_t counter = 0;
 uint8_t counter2 = 0;
 
+/**************************** Function Prototypes *****************************/
+//Hardware specific functions
+void Delay_ms(int cnt);
+uint32_t get_time(void);
+void init_io(void);
+void disable_io(void);
+void init_timers(void);
+void init_pcint(void);
+void disable_pcint(void);
+void sleep_my_pretty(void);
+void set_led(uint8_t lednum, uint8_t onoff);
+void clear_charlie_array(void);
+void charlie(uint8_t led_num);
+void fade_led(uint8_t lednum, uint8_t dimness);
+
+//LED visualization functions
+uint8_t post(uint8_t * step, uint32_t * next_step_time);
+uint8_t pulsate(uint8_t * step_counter, uint32_t * next_step_time);
+void init_pew(uint8_t * left_counter, uint8_t * right_counter);
+void pew(uint8_t * left_counter, uint32_t * left_next_step_time, uint8_t * right_counter, uint32_t * right_next_step_time);
+uint8_t sparkle(uint8_t * step, uint32_t * next_step_time);
+
+//State handling functions
+void clean_slate(void);
+void advance_state(uint8_t newstate);
+
+
+/**************************** Hardware specific functions *****************************/
 void Delay_ms(int cnt) {
 	while (cnt-->0) {
 		_delay_ms(1);
@@ -143,6 +171,43 @@ void disable_pcint(void) {
   PCICR &= ~(1<<PCIE1);
 }
 
+void sleep_my_pretty(void) {
+  cli();                //disable interrupts
+  disable_io();         //make sure we're not driving pins while asleep
+  init_pcint();         //enable pin-change interrupts to wake from sleep
+  set_sleep_mode(SLEEP_MODE_PWR_DOWN);  //Set mode for lowest power
+  sleep_enable();       //Get ready for sleep
+  //sleep_bod_disable();  //Disable brown-out detection for lower power (apparently not for ATmega48
+  sei();                //Ensure interrupts are enabled (lest we never wake)
+  sleep_cpu();          //Sleep immediately after enabling interrupts so non can fire before sleep
+  disable_pcint();      //Don't need pin-change interrupts when awake
+  sleep_disable();      //Disable to we're in a known state next time we need to sleep
+  init_io();            //Get IO pins ready for wakeful operations
+}
+
+void set_led(uint8_t lednum, uint8_t onoff) {
+  if (lednum < 8) {
+    if (onoff) PORTB |= led_order[lednum];
+    else PORTB &= ~led_order[lednum];
+  }
+  else if (lednum < 12) {
+    if (onoff) PORTC |= led_order[lednum];
+    else PORTC &= ~led_order[lednum];
+  }
+  else if (lednum < 16) {
+    if (onoff) PORTD |= led_order[lednum];
+    else PORTD &= ~led_order[lednum];
+  }
+  else if (lednum <22) {
+    if (onoff) charlie(lednum-15);
+    else charlie(0);
+  }
+}
+
+void clear_charlie_array(void) {
+  for (uint8_t i=0; i<6; i++) charlie_array[i] = 0;
+}
+
 void charlie(uint8_t led_num) {
   //All pins input (Hi-Z mode)
   CHARLIE_DDR &= ~(CHARLIE_MASK);
@@ -191,55 +256,6 @@ void charlie(uint8_t led_num) {
   };
 }
 
-uint8_t post(uint8_t * step, uint32_t * next_step_time) {
-  if (get_time() < *next_step_time) return 0;
-
-  *next_step_time = get_time() + POST_DELAY;
-  PORTB &= ~(OUT_MASK_B);
-  PORTC &= ~(OUT_MASK_C);
-  CHARLIE_DDR &= ~(CHARLIE_MASK);
-  CHARLIE_PORT &= ~(OUT_MASK_D | CHARLIE_MASK);
-
-  if (*step > 21) return 1;
-
-  set_led(*step, 1);
-  *step += 1;
-  return 0;
-}
-
-void sleep_my_pretty(void) {
-  cli();                //disable interrupts
-  disable_io();         //make sure we're not driving pins while asleep
-  init_pcint();         //enable pin-change interrupts to wake from sleep
-  set_sleep_mode(SLEEP_MODE_PWR_DOWN);  //Set mode for lowest power
-  sleep_enable();       //Get ready for sleep
-  //sleep_bod_disable();  //Disable brown-out detection for lower power (apparently not for ATmega48
-  sei();                //Ensure interrupts are enabled (lest we never wake)
-  sleep_cpu();          //Sleep immediately after enabling interrupts so non can fire before sleep
-  disable_pcint();      //Don't need pin-change interrupts when awake
-  sleep_disable();      //Disable to we're in a known state next time we need to sleep
-  init_io();            //Get IO pins ready for wakeful operations
-}
-
-void set_led(uint8_t lednum, uint8_t onoff) {
-  if (lednum < 8) {
-    if (onoff) PORTB |= led_order[lednum];
-    else PORTB &= ~led_order[lednum];
-  }
-  else if (lednum < 12) {
-    if (onoff) PORTC |= led_order[lednum];
-    else PORTC &= ~led_order[lednum];
-  }
-  else if (lednum < 16) {
-    if (onoff) PORTD |= led_order[lednum];
-    else PORTD &= ~led_order[lednum];
-  }
-  else if (lednum <22) {
-    if (onoff) charlie(lednum-15);
-    else charlie(0);
-  }
-}
-
 void fade_led(uint8_t lednum, uint8_t dimness) {
   volatile uint8_t * dimarray;
   if (lednum < 8) dimarray = bmatrix;
@@ -257,8 +273,21 @@ void fade_led(uint8_t lednum, uint8_t dimness) {
   }
 }
 
-void clear_charlie_array(void) {
-  for (uint8_t i=0; i<6; i++) charlie_array[i] = 0;
+/**************************** LED visualization functions *****************************/
+uint8_t post(uint8_t * step, uint32_t * next_step_time) {
+  if (get_time() < *next_step_time) return 0;
+
+  *next_step_time = get_time() + POST_DELAY;
+  PORTB &= ~(OUT_MASK_B);
+  PORTC &= ~(OUT_MASK_C);
+  CHARLIE_DDR &= ~(CHARLIE_MASK);
+  CHARLIE_PORT &= ~(OUT_MASK_D | CHARLIE_MASK);
+
+  if (*step > 21) return 1;
+
+  set_led(*step, 1);
+  *step += 1;
+  return 0;
 }
 
 uint8_t pulsate(uint8_t * step_counter, uint32_t * next_step_time) {
@@ -282,6 +311,7 @@ uint8_t pulsate(uint8_t * step_counter, uint32_t * next_step_time) {
     charlie_array[4] = charlie_spin_idx[charlie_spin+3];
     if (++charlie_spin > 2) charlie_spin = 0;
   }
+  return 0;
 }
 
 void init_pew(uint8_t * left_counter, uint8_t * right_counter) {
@@ -346,6 +376,7 @@ uint8_t sparkle(uint8_t * step, uint32_t * next_step_time) {
   return 0;
 }
 
+/**************************** State handling functions *****************************/
 void clean_slate(void) {
   //Set all IO back to initialization
   TIMSK1 &= ~(1<<OCIE1A); //Stop the LED scanning timer
@@ -386,6 +417,7 @@ void advance_state(uint8_t newstate) {
   };
 }
 
+/**************************** Main program function *****************************/
 int main(void)
 {
   ticks = 0;
@@ -449,7 +481,7 @@ int main(void)
   }
 }
 
-
+/**************************** Interrupt servicing functions *****************************/
 ISR(PCINT1_vect) {
   //Don't actually need an ISR to wake from sleep
 }
