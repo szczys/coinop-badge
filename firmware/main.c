@@ -3,6 +3,7 @@
 #include <avr/interrupt.h>
 #include <util/delay.h>
 #include <avr/sleep.h>
+#include <avr/wdt.h>
 #include "debounce.h"
 
 void Delay_ms(int cnt);
@@ -15,6 +16,9 @@ void Delay_ms(int cnt);
 #define STATE_FADE          5
 #define STATE_PEW           6
 #define STATE_SPARKLE       7
+
+#define HIBERNATE           0
+#define SNOOZE              1
 
 uint8_t state;
 
@@ -89,7 +93,8 @@ void disable_io(void);
 void init_timers(void);
 void init_pcint(void);
 void disable_pcint(void);
-void sleep_my_pretty(void);
+void sleep_my_pretty(uint8_t timed);
+void snooze(void);
 void set_led(uint8_t lednum, uint8_t onoff);
 void clear_charlie_array(void);
 void charlie(uint8_t led_num);
@@ -105,7 +110,7 @@ uint8_t sparkle(uint8_t * step, uint32_t * next_step_time);
 //State handling functions
 void clean_slate(void);
 void advance_state(uint8_t newstate);
-
+void timed_advance(void);
 
 /**************************** Hardware specific functions *****************************/
 void Delay_ms(int cnt) {
@@ -171,19 +176,48 @@ void disable_pcint(void) {
   PCICR &= ~(1<<PCIE1);
 }
 
-void sleep_my_pretty(void) {
+void sleep_my_pretty(uint8_t timed) {
   cli();                //disable interrupts
   disable_io();         //make sure we're not driving pins while asleep
   init_pcint();         //enable pin-change interrupts to wake from sleep
+  if (timed) {
+    wdt_reset();
+    MCUSR &= ~(1<<WDRF);
+    WDTCSR |= (1<<WDCE | 1<<WDE);
+    WDTCSR = (1<<WDIE | 1<<WDP3);
+  }
   set_sleep_mode(SLEEP_MODE_PWR_DOWN);  //Set mode for lowest power
   sleep_enable();       //Get ready for sleep
   //sleep_bod_disable();  //Disable brown-out detection for lower power (apparently not for ATmega48
   sei();                //Ensure interrupts are enabled (lest we never wake)
   sleep_cpu();          //Sleep immediately after enabling interrupts so non can fire before sleep
+  if (timed) {
+    MCUSR &= ~(1<<WDRF);
+    WDTCSR |= (1<<WDCE | 1<<WDE);
+    WDTCSR = 0;
+  }
   disable_pcint();      //Don't need pin-change interrupts when awake
   sleep_disable();      //Disable to we're in a known state next time we need to sleep
   init_io();            //Get IO pins ready for wakeful operations
 }
+
+/*
+void snooze(void) {
+  cli();
+  disable_io();
+  init_pcint();
+  set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+  sleep_enable();
+  sei();
+  sleep_cpu();
+  MCUSR &= ~(1<<WDRF);
+  WDTCSR |= (1<<WDCE | 1<<WDE);
+  WDTCSR = 0;
+  disable_pcint();
+  sleep_disable();
+  init_io();
+}
+*/
 
 void set_led(uint8_t lednum, uint8_t onoff) {
   if (lednum < 8) {
@@ -417,6 +451,11 @@ void advance_state(uint8_t newstate) {
   };
 }
 
+void timed_advance(void) {
+  sleep_my_pretty(SNOOZE);
+  advance_state(0);
+}
+
 /**************************** Main program function *****************************/
 int main(void)
 {
@@ -450,11 +489,11 @@ int main(void)
       case STATE_NOSTATE:
         break;
       case STATE_POST:         
-          if (post(&counter, &wait_until)) advance_state(0);
+          if (post(&counter, &wait_until)) timed_advance();
         break;
       case STATE_FADE:
         if (pulsate(&counter, &wait_until)) {
-          if (++counter2 > 5) advance_state(0);
+          if (++counter2 > 5) timed_advance();
           else counter = 0;
         }
         break;
@@ -463,7 +502,7 @@ int main(void)
         break;
       case STATE_SPARKLE:
         if (sparkle(&counter, &wait_until)) {
-          if (++counter2 > 5) advance_state(0);
+          if (++counter2 > 5) timed_advance();
           else counter = 0;
         }
         break;
@@ -477,12 +516,16 @@ int main(void)
     if(get_key_short(KEY0)) {
       if (state == STATE_PEW) init_pew(&counter,0);
     }
-    if(get_key_rpt(KEY0)) sleep_my_pretty();
+    if(get_key_rpt(KEY0)) sleep_my_pretty(HIBERNATE);
   }
 }
 
 /**************************** Interrupt servicing functions *****************************/
 ISR(PCINT1_vect) {
+  //Don't actually need an ISR to wake from sleep
+}
+
+ISR(WDT_vect) {
   //Don't actually need an ISR to wake from sleep
 }
 
