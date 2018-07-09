@@ -66,7 +66,11 @@ const uint8_t sparkle_rando[22] = {18,2,0,14,4,5,3,15,10,13,6,17,11,8,21,9,19,16
 #define POST_DELAY          100
 #define PULSATE_DELAY       40
 #define CHARLIE_SPIN_DELAY  120
-#define PEW_MAX             8
+#define PEW_BOTH            8
+#define PEW_INNER           4
+#define PEW_OUTER           16
+#define LASER_LEFT          (1<<0)
+#define LASER_RIGHT         (1<<1)
 #define PEW_DELAY           80
 #define SPARKLE_DELAY       40
 
@@ -103,7 +107,7 @@ void fade_led(uint8_t lednum, uint8_t dimness);
 //LED visualization functions
 uint8_t post(uint8_t * step, uint32_t * next_step_time);
 uint8_t pulsate(uint8_t * step_counter, uint32_t * next_step_time);
-void init_pew(uint8_t * left_counter, uint8_t * right_counter);
+void init_pew(uint8_t counter_value, uint8_t counter2_value);
 void pew(uint8_t * left_counter, uint32_t * left_next_step_time, uint8_t * right_counter, uint32_t * right_next_step_time);
 uint8_t sparkle(uint8_t * step, uint32_t * next_step_time);
 
@@ -348,52 +352,63 @@ uint8_t pulsate(uint8_t * step_counter, uint32_t * next_step_time) {
   return 0;
 }
 
-void init_pew(uint8_t * left_counter, uint8_t * right_counter) {
+void init_pew(uint8_t counter_value, uint8_t counter2_value) {
   //*left_counter = PEW_MAX;
-  if (&left_counter > 0) {
-    *left_counter = PEW_MAX;
+  if (counter_value > 0) {
+    counter = counter_value;
     for (uint8_t i=0; i<6; i++) set_led(i,0);
   }
-  if (&right_counter > 0) {
-    *right_counter = PEW_MAX;
+  if (counter2_value > 0) {
+    counter2 = counter2_value;
     for (uint8_t i=6; i<12; i++) set_led(i,0);
   }
+}
+
+void laser_left(uint8_t * left_counter) {
+  //Little modulo hack allows firing innner/outer lasers at separate times
+  switch((*left_counter)%8) {
+    case 0: set_led(2,1); break;
+    case 7: set_led(2,0); set_led(1,1); break;
+    case 6: set_led(1,0); set_led(0,1); break;
+    case 5: set_led(0,0); break;
+    case 4: set_led(5,1); break;
+    case 3: set_led(5,0); set_led(4,1); break;
+    case 2: set_led(4,0); set_led(3,1); break;
+    case 1: set_led(3,0); break;
+  };
+}
+
+void laser_right(uint8_t * right_counter) {
+  switch((*right_counter)%8) {
+    case 0: set_led(11,1); break;
+    case 7: set_led(11,0); set_led(10,1); break;
+    case 6: set_led(10,0); set_led(9,1); break;
+    case 5: set_led(9,0); break;
+    case 4: set_led(8,1); break;
+    case 3: set_led(8,0); set_led(7,1); break;
+    case 2: set_led(7,0); set_led(6,1); break;
+    case 1: set_led(6,0); break;
+  };
 }
 
 void pew(uint8_t * left_counter, uint32_t * left_next_step_time, uint8_t * right_counter, uint32_t * right_next_step_time) {
   //set up callback timers
   uint32_t next = get_time() + PEW_DELAY;
+  if (*left_counter == 12) *left_counter = 0;
   if (*left_counter > 0) {
     if (get_time() > *left_next_step_time) {
       *left_next_step_time = next;
-
-      switch(*left_counter) {
-        case 8: set_led(2,1); break;
-        case 7: set_led(2,0); set_led(1,1); break;
-        case 6: set_led(1,0); set_led(0,1); break;
-        case 5: set_led(0,0);  *left_next_step_time += PEW_DELAY; break;
-        case 4: set_led(5,1); break;
-        case 3: set_led(5,0); set_led(4,1); break;
-        case 2: set_led(4,0); set_led(3,1); break;
-        case 1: set_led(3,0); break;
-      };
+      if (*left_counter == 5) *left_next_step_time += PEW_DELAY;
+      laser_left(left_counter);
       --*left_counter;
     }
   }
+  if (*right_counter == 12) *right_counter = 0;
   if (*right_counter > 0) {
     if (get_time() > *right_next_step_time) {
       *right_next_step_time = next;
-
-      switch(*right_counter) {
-        case 8: set_led(11,1); break;
-        case 7: set_led(11,0); set_led(10,1); break;
-        case 6: set_led(10,0); set_led(9,1); break;
-        case 5: set_led(9,0);  *right_next_step_time += PEW_DELAY; break;
-        case 4: set_led(8,1); break;
-        case 3: set_led(8,0); set_led(7,1); break;
-        case 2: set_led(7,0); set_led(6,1); break;
-        case 1: set_led(6,0); break;
-      };
+      if (*right_counter == 5) *right_next_step_time += PEW_DELAY;
+      laser_right(right_counter);
       --*right_counter;
     }
   }
@@ -444,7 +459,7 @@ void advance_state(uint8_t newstate) {
       TIMSK1 |= 1<<OCIE1A;
       break;
     case STATE_PEW:
-      init_pew(&counter, &counter2);      
+      init_pew(PEW_BOTH, PEW_BOTH);      
       break;
     case STATE_SPARKLE:
       break;   
@@ -467,7 +482,7 @@ int main(void)
   counter = 0;
   counter2 = 0;
   init_io();
-  
+  uint8_t laser_toggle = 0;
   
   
   for (uint8_t i=0; i<24; i++) {
@@ -509,12 +524,20 @@ int main(void)
     };
     
     if(get_key_short(KEY1)) {
-      if (state == STATE_PEW) init_pew(0,&counter2);
+      if (state == STATE_PEW) {
+        if (laser_toggle & LASER_RIGHT) init_pew(0,PEW_INNER);
+        else init_pew(0,PEW_OUTER);
+        laser_toggle ^= LASER_RIGHT;
+      }
     }
     if(get_key_rpt(KEY1)) advance_state(0);
 
     if(get_key_short(KEY0)) {
-      if (state == STATE_PEW) init_pew(&counter,0);
+      if (state == STATE_PEW) {
+        if (laser_toggle & LASER_LEFT) init_pew(PEW_INNER,0);
+        else init_pew(PEW_OUTER,0);
+        laser_toggle ^= LASER_LEFT;
+      }
     }
     if(get_key_rpt(KEY0)) sleep_my_pretty(HIBERNATE);
   }
