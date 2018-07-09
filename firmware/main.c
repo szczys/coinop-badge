@@ -15,7 +15,8 @@ void Delay_ms(int cnt);
 #define STATE_POST          4
 #define STATE_FADE          5
 #define STATE_PEW           6
-#define STATE_SPARKLE       7
+#define STATE_SHIELDFADE    7
+#define STATE_SPARKLE       8
 
 #define HIBERNATE           0
 #define SNOOZE              1
@@ -108,7 +109,7 @@ void fade_led(uint8_t lednum, uint8_t dimness);
 uint8_t post(uint8_t * step, uint32_t * next_step_time);
 uint8_t pulsate(uint8_t * step_counter, uint32_t * next_step_time);
 void init_pew(uint8_t counter_value, uint8_t counter2_value);
-void pew(uint8_t * left_counter, uint32_t * left_next_step_time, uint8_t * right_counter, uint32_t * right_next_step_time);
+uint8_t pew(uint8_t * left_counter, uint32_t * left_next_step_time, uint8_t * right_counter, uint32_t * right_next_step_time);
 uint8_t sparkle(uint8_t * step, uint32_t * next_step_time);
 
 //State handling functions
@@ -391,7 +392,8 @@ void laser_right(uint8_t * right_counter) {
   };
 }
 
-void pew(uint8_t * left_counter, uint32_t * left_next_step_time, uint8_t * right_counter, uint32_t * right_next_step_time) {
+uint8_t pew(uint8_t * left_counter, uint32_t * left_next_step_time, uint8_t * right_counter, uint32_t * right_next_step_time) {
+  if ((*left_counter == 0) & (*right_counter == 0)) return 1;
   //set up callback timers
   uint32_t next = get_time() + PEW_DELAY;
   if (*left_counter == 12) *left_counter = 0;
@@ -412,6 +414,21 @@ void pew(uint8_t * left_counter, uint32_t * left_next_step_time, uint8_t * right
       --*right_counter;
     }
   }
+  return 0;
+}
+
+uint8_t shield_fade(uint8_t * step, uint32_t * next_step_time) {
+  if (get_time() < *next_step_time) return 0;
+  if (*step >= 11) return 1;
+  else *next_step_time = get_time() + PULSATE_DELAY;
+  if ((TIMSK1 & 1<<OCIE1A) == 0) {
+    TIMSK1 |= 1<<OCIE1A;
+    *step = 0;
+    clear_charlie_array();
+  }
+  for (uint8_t i=12; i<16; i++) fade_led(i,logscale[*step]);
+  if (++(*step) == 11) *next_step_time += 1000;
+  return 0;
 }
 
 uint8_t sparkle(uint8_t * step, uint32_t * next_step_time) {
@@ -435,6 +452,12 @@ void clean_slate(void) {
   PORTD &= ~OUT_MASK_D;
   //Shut down Charlieplex
   charlie(0);
+  //Clear all fade values
+  for (uint8_t i=0; i<24; i++) {
+    bmatrix[i] = 0;
+    cmatrix[i] = 0;
+    dmatrix[i] = 0;
+  }
   //Reset counters and wait times
   wait_until = 0;
   wait_until2 = 0;
@@ -461,6 +484,9 @@ void advance_state(uint8_t newstate) {
     case STATE_PEW:
       init_pew(PEW_BOTH, PEW_BOTH);      
       break;
+    case STATE_SHIELDFADE:
+      TIMSK1 |= 1<<OCIE1A;
+      break;
     case STATE_SPARKLE:
       break;   
   };
@@ -484,13 +510,6 @@ int main(void)
   init_io();
   uint8_t laser_toggle = 0;
   
-  
-  for (uint8_t i=0; i<24; i++) {
-    bmatrix[i] = 0;
-    cmatrix[i] = 0;
-    dmatrix[i] = 0;
-  }
-  
   advance_state(STATE_POST);
 
   init_timers();
@@ -513,7 +532,10 @@ int main(void)
         }
         break;
       case STATE_PEW:
-        pew(&counter, &wait_until, &counter2, &wait_until2);
+        if (pew(&counter, &wait_until, &counter2, &wait_until2)) advance_state(0);
+        break;
+      case STATE_SHIELDFADE:
+        if (shield_fade(&counter, &wait_until)) advance_state(0);
         break;
       case STATE_SPARKLE:
         if (sparkle(&counter, &wait_until)) {
