@@ -103,6 +103,7 @@ void snooze(void);
 void set_led(uint8_t lednum, uint8_t onoff);
 void clear_charlie_array(void);
 void charlie(uint8_t led_num);
+void start_fade(void);
 void fade_led(uint8_t lednum, uint8_t dimness);
 
 //LED visualization functions
@@ -278,6 +279,8 @@ void charlie(uint8_t led_num) {
   };
 }
 
+void start_fade(void) { TIMSK1 |= 1<<OCIE1A; }
+
 void fade_led(uint8_t lednum, uint8_t dimness) {
   volatile uint8_t * dimarray;
   if (lednum < 8) dimarray = bmatrix;
@@ -318,7 +321,7 @@ uint8_t pulsate(uint8_t * step_counter, uint32_t * next_step_time) {
   if (get_time() < *next_step_time) return 0;
   else {
     if ((TIMSK1 & 1<<OCIE1A) == 0) {
-      TIMSK1 |= 1<<OCIE1A;
+      start_fade();
       *step_counter = 0;
       clear_charlie_array();
     }
@@ -422,7 +425,7 @@ void clean_slate(void) {
   //Shut down Charlieplex
   charlie(0);
   //Clear all fade values
-  for (uint8_t i=0; i<24; i++) {
+  for (uint8_t i=0; i<FADE_RESOLUTION; i++) {
     bmatrix[i] = 0;
     cmatrix[i] = 0;
     dmatrix[i] = 0;
@@ -445,10 +448,12 @@ void advance_state(uint8_t newstate) {
   switch(state) {
     case STATE_NOSTATE:
       break;
+    case STATE_CONFIRMSLEEP:
+      break;
     case STATE_POST:
       break;
     case STATE_FADE:
-      TIMSK1 |= 1<<OCIE1A;
+      start_fade();
       break;
     case STATE_PEW:
       init_pew(PEW_BOTH, PEW_BOTH);      
@@ -481,6 +486,7 @@ int main(void)
   init_io();
   uint8_t left_laser_tracker = 0;
   uint8_t right_laser_tracker = 0;
+  uint8_t previous_state = STATE_FADE;
   
   advance_state(STATE_POST);
 
@@ -493,6 +499,9 @@ int main(void)
   {
     switch(state) {
       case STATE_NOSTATE:
+        break;
+      case STATE_CONFIRMSLEEP:
+        if (counter == 0) { sleep_my_pretty(HIBERNATE); advance_state(previous_state); }
         break;
       case STATE_POST:         
           if (post(&counter, &wait_until)) timed_advance();
@@ -535,7 +544,7 @@ int main(void)
     }
 
     if(get_key_short(KEY0)) {
-      if (ignore_next_key_short) { ignore_next_key_short = 0; }
+      if (state == STATE_CONFIRMSLEEP) { advance_state(previous_state); }
       else {
         advance_state(STATE_MANUALPEW);
         if (left_laser_tracker < 2) init_pew(PEW_INNER,0);
@@ -544,8 +553,16 @@ int main(void)
       }
     }
     if(get_key_rpt(KEY0)) {
-      sleep_my_pretty(HIBERNATE);
-      ++ignore_next_key_short; 
+      if (state != STATE_CONFIRMSLEEP) {
+        previous_state = state;
+        advance_state(STATE_CONFIRMSLEEP);
+        for (counter=0; counter<4; counter++) fade_led(counter*3,16);
+        start_fade();
+      }
+      else {
+        --counter;
+        fade_led(counter*3,0);
+      } 
     }
   }
 }
