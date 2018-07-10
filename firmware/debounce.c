@@ -51,7 +51,7 @@ unsigned char get_key_short( unsigned char key_mask )
 unsigned char get_key_long( unsigned char key_mask ) 
 { 
   return get_key_press( get_key_rpt( key_mask )); 
-} 
+}
 
 /*--------------------------------------------------------------------------
   FUNC: 7/8/18 - Used to debounce buttons in an interrupt service routine

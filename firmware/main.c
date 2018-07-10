@@ -424,6 +424,7 @@ void clean_slate(void) {
   PORTD &= ~OUT_MASK_D;
   //Shut down Charlieplex
   charlie(0);
+  clear_charlie_array();
   //Clear all fade values
   for (uint8_t i=0; i<FADE_RESOLUTION; i++) {
     bmatrix[i] = 0;
@@ -501,7 +502,6 @@ int main(void)
       case STATE_NOSTATE:
         break;
       case STATE_CONFIRMSLEEP:
-        if (counter == 0) { sleep_my_pretty(HIBERNATE); advance_state(previous_state); }
         break;
       case STATE_POST:         
           if (post(&counter, &wait_until)) timed_advance();
@@ -545,6 +545,7 @@ int main(void)
 
     if(get_key_short(KEY0)) {
       if (state == STATE_CONFIRMSLEEP) { advance_state(previous_state); }
+      else if(ignore_next_key_short) { ignore_next_key_short = 0; }
       else {
         advance_state(STATE_MANUALPEW);
         if (left_laser_tracker < 2) init_pew(PEW_INNER,0);
@@ -556,13 +557,28 @@ int main(void)
       if (state != STATE_CONFIRMSLEEP) {
         previous_state = state;
         advance_state(STATE_CONFIRMSLEEP);
-        for (counter=0; counter<4; counter++) fade_led(counter*3,16);
+        fade_led(0,16);
+        fade_led(3,16);
+        fade_led(6,16);
+        fade_led(9,16);
+        charlie_array[0] = 1;
+        charlie_array[4] = 2;
+        counter = 3;
         start_fade();
       }
       else {
-        --counter;
-        fade_led(counter*3,0);
-      } 
+        if (counter == 0) { 
+          fade_led(counter, 0);
+          while(KEY_PIN & KEY0) { ;; } //wait for key release
+          sleep_my_pretty(HIBERNATE);
+          advance_state(previous_state);
+        }
+        else {
+          fade_led(counter*3,0);
+          --counter;
+        }
+      }
+      //++ignore_next_key_short;
     }
   }
 }
