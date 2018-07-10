@@ -15,8 +15,9 @@ void Delay_ms(int cnt);
 #define STATE_POST          4
 #define STATE_FADE          5
 #define STATE_PEW           6
-#define STATE_SHIELDFADE    7
-#define STATE_SPARKLE       8
+#define STATE_MANUALPEW     7
+#define STATE_WAIT          8
+#define STATE_SPARKLE       9
 
 #define HIBERNATE           0
 #define SNOOZE              1
@@ -70,8 +71,6 @@ const uint8_t sparkle_rando[22] = {18,2,0,14,4,5,3,15,10,13,6,17,11,8,21,9,19,16
 #define PEW_BOTH            8
 #define PEW_INNER           4
 #define PEW_OUTER           16
-#define LASER_LEFT          (1<<0)
-#define LASER_RIGHT         (1<<1)
 #define PEW_DELAY           80
 #define SPARKLE_DELAY       40
 
@@ -204,6 +203,7 @@ void sleep_my_pretty(uint8_t timed) {
   disable_pcint();      //Don't need pin-change interrupts when awake
   sleep_disable();      //Disable to we're in a known state next time we need to sleep
   init_io();            //Get IO pins ready for wakeful operations
+  key_state |= KEY_MASK;  //Clear button presses (we just want to wake)
 }
 
 /*
@@ -417,20 +417,6 @@ uint8_t pew(uint8_t * left_counter, uint32_t * left_next_step_time, uint8_t * ri
   return 0;
 }
 
-uint8_t shield_fade(uint8_t * step, uint32_t * next_step_time) {
-  if (get_time() < *next_step_time) return 0;
-  if (*step >= 11) return 1;
-  else *next_step_time = get_time() + PULSATE_DELAY;
-  if ((TIMSK1 & 1<<OCIE1A) == 0) {
-    TIMSK1 |= 1<<OCIE1A;
-    *step = 0;
-    clear_charlie_array();
-  }
-  for (uint8_t i=12; i<16; i++) fade_led(i,logscale[*step]);
-  if (++(*step) == 11) *next_step_time += 1000;
-  return 0;
-}
-
 uint8_t sparkle(uint8_t * step, uint32_t * next_step_time) {
   if (get_time() < *next_step_time) return 0;
   *next_step_time = get_time() + SPARKLE_DELAY;
@@ -484,9 +470,11 @@ void advance_state(uint8_t newstate) {
     case STATE_PEW:
       init_pew(PEW_BOTH, PEW_BOTH);      
       break;
-    case STATE_SHIELDFADE:
-      TIMSK1 |= 1<<OCIE1A;
+    case STATE_MANUALPEW:
       break;
+    case STATE_WAIT:
+        wait_until = get_time() + 4000;
+        break;
     case STATE_SPARKLE:
       break;   
   };
@@ -508,7 +496,8 @@ int main(void)
   counter = 0;
   counter2 = 0;
   init_io();
-  uint8_t laser_toggle = 0;
+  uint8_t left_laser_tracker = 0;
+  uint8_t right_laser_tracker = 0;
   
   advance_state(STATE_POST);
 
@@ -534,8 +523,11 @@ int main(void)
       case STATE_PEW:
         if (pew(&counter, &wait_until, &counter2, &wait_until2)) advance_state(0);
         break;
-      case STATE_SHIELDFADE:
-        if (shield_fade(&counter, &wait_until)) advance_state(0);
+      case STATE_MANUALPEW:
+        if (pew(&counter, &wait_until, &counter2, &wait_until2)) advance_state(0);
+        break;
+      case STATE_WAIT:
+        if (get_time() > wait_until) advance_state(0);
         break;
       case STATE_SPARKLE:
         if (sparkle(&counter, &wait_until)) {
@@ -546,20 +538,19 @@ int main(void)
     };
     
     if(get_key_short(KEY1)) {
-      if (state == STATE_PEW) {
-        if (laser_toggle & LASER_RIGHT) init_pew(0,PEW_INNER);
-        else init_pew(0,PEW_OUTER);
-        laser_toggle ^= LASER_RIGHT;
-      }
+      advance_state(STATE_MANUALPEW);
+      if (right_laser_tracker < 2) init_pew(0,PEW_INNER);
+      else init_pew(0,PEW_OUTER);
+      if (++right_laser_tracker > 3) right_laser_tracker = 0;
+      
     }
     if(get_key_rpt(KEY1)) advance_state(0);
 
     if(get_key_short(KEY0)) {
-      if (state == STATE_PEW) {
-        if (laser_toggle & LASER_LEFT) init_pew(PEW_INNER,0);
-        else init_pew(PEW_OUTER,0);
-        laser_toggle ^= LASER_LEFT;
-      }
+      advance_state(STATE_MANUALPEW);
+      if (left_laser_tracker < 2) init_pew(PEW_INNER,0);
+      else init_pew(PEW_OUTER,0);
+      if (++left_laser_tracker > 3) left_laser_tracker = 0;
     }
     if(get_key_rpt(KEY0)) sleep_my_pretty(HIBERNATE);
   }
