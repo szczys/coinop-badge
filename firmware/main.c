@@ -87,6 +87,7 @@ uint32_t wait_until2 = 0;
 uint32_t charlie_timer = 0;
 uint8_t counter = 0;
 uint8_t counter2 = 0;
+uint8_t ignore_next_key_short = 0;
 
 /**************************** Function Prototypes *****************************/
 //Hardware specific functions
@@ -203,26 +204,8 @@ void sleep_my_pretty(uint8_t timed) {
   disable_pcint();      //Don't need pin-change interrupts when awake
   sleep_disable();      //Disable to we're in a known state next time we need to sleep
   init_io();            //Get IO pins ready for wakeful operations
-  key_state |= KEY_MASK;  //Clear button presses (we just want to wake)
+  ++ignore_next_key_short;
 }
-
-/*
-void snooze(void) {
-  cli();
-  disable_io();
-  init_pcint();
-  set_sleep_mode(SLEEP_MODE_PWR_DOWN);
-  sleep_enable();
-  sei();
-  sleep_cpu();
-  MCUSR &= ~(1<<WDRF);
-  WDTCSR |= (1<<WDCE | 1<<WDE);
-  WDTCSR = 0;
-  disable_pcint();
-  sleep_disable();
-  init_io();
-}
-*/
 
 void set_led(uint8_t lednum, uint8_t onoff) {
   if (lednum < 8) {
@@ -538,27 +521,38 @@ int main(void)
     };
     
     if(get_key_short(KEY1)) {
-      advance_state(STATE_MANUALPEW);
-      if (right_laser_tracker < 2) init_pew(0,PEW_INNER);
-      else init_pew(0,PEW_OUTER);
-      if (++right_laser_tracker > 3) right_laser_tracker = 0;
-      
+      if (ignore_next_key_short) { ignore_next_key_short = 0; }
+      else {
+        advance_state(STATE_MANUALPEW);
+        if (right_laser_tracker < 2) init_pew(0,PEW_INNER);
+        else init_pew(0,PEW_OUTER);
+        if (++right_laser_tracker > 3) right_laser_tracker = 0;
+      } 
     }
-    if(get_key_rpt(KEY1)) advance_state(0);
+    if(get_key_rpt(KEY1)) {
+      advance_state(0);
+      ++ignore_next_key_short;
+    }
 
     if(get_key_short(KEY0)) {
-      advance_state(STATE_MANUALPEW);
-      if (left_laser_tracker < 2) init_pew(PEW_INNER,0);
-      else init_pew(PEW_OUTER,0);
-      if (++left_laser_tracker > 3) left_laser_tracker = 0;
+      if (ignore_next_key_short) { ignore_next_key_short = 0; }
+      else {
+        advance_state(STATE_MANUALPEW);
+        if (left_laser_tracker < 2) init_pew(PEW_INNER,0);
+        else init_pew(PEW_OUTER,0);
+        if (++left_laser_tracker > 3) left_laser_tracker = 0;
+      }
     }
-    if(get_key_rpt(KEY0)) sleep_my_pretty(HIBERNATE);
+    if(get_key_rpt(KEY0)) {
+      sleep_my_pretty(HIBERNATE);
+      ++ignore_next_key_short; 
+    }
   }
 }
 
 /**************************** Interrupt servicing functions *****************************/
 ISR(PCINT1_vect) {
-  //Don't actually need an ISR to wake from sleep
+  key_state |= KEY_MASK;  //Clear the key press (wake only, don't react as if user input)
 }
 
 ISR(WDT_vect) {
