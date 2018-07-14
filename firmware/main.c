@@ -174,7 +174,7 @@ void init_timers(void) {
 
 void init_pcint(void) {
   PCICR |= (1<<PCIE1);
-  PCMSK1 |= (1<<PCINT9);
+  PCMSK1 |= (1<<PCINT9 | 1<<PCINT8);
   PCIFR |= 1<<PCIF1;    //Clear the PCINT flag (might not have been done after last wakeup)
 }
 
@@ -340,7 +340,6 @@ uint8_t pulsate(uint8_t * step_counter, uint32_t * next_step_time) {
 }
 
 void init_pew(uint8_t counter_value, uint8_t counter2_value) {
-  //*left_counter = PEW_MAX;
   if (counter_value > 0) {
     counter = counter_value;
     for (uint8_t i=0; i<6; i++) set_led(i,0);
@@ -450,6 +449,12 @@ void advance_state(uint8_t newstate) {
     case STATE_NOSTATE:
       break;
     case STATE_CONFIRMSLEEP:
+      fade_led(0,16);
+      fade_led(3,16);
+      fade_led(6,16);
+      fade_led(9,16);
+      counter = 3;
+      start_fade();
       break;
     case STATE_POST:
       break;
@@ -472,6 +477,53 @@ void advance_state(uint8_t newstate) {
 void timed_advance(void) {
   sleep_my_pretty(SNOOZE);
   advance_state(0);
+}
+
+void verify_sleep(uint8_t previous_state) {
+  while(1) {
+    if(get_key_short(KEY0)) {
+      advance_state(previous_state);
+      return;
+    }
+    if(get_key_rpt(KEY0)) {
+      if (counter == 0) { 
+        fade_led(counter, 0);
+        cli();  //Prevent more repeat reads
+        while(KEY_PIN & KEY0) { ;; } //wait for key release
+        advance_state(STATE_ASLEEP);
+        return;
+      }
+      else {
+        fade_led(counter*3,0);
+        --counter;
+      }
+    }
+  }
+}
+
+void dont_wake_early(uint8_t previous_state) {
+  sleep_my_pretty(HIBERNATE);
+  counter = 0;
+  fade_led(counter, 1);
+  start_fade();
+  while(1) {
+    if(get_key_rpt(KEY0)) {
+      if (counter == 3) { 
+        while(KEY_PIN & KEY0) { ;; } //wait for key release
+        advance_state(previous_state);
+        sei();
+        return;
+      }
+      else {
+        fade_led(++counter*3,1);
+      }
+    }
+    if(get_key_short(KEY0)) {
+      clean_slate();
+      advance_state(STATE_ASLEEP);
+      return;
+    }
+  }
 }
 
 /**************************** Main program function *****************************/
@@ -502,6 +554,10 @@ int main(void)
       case STATE_NOSTATE:
         break;
       case STATE_CONFIRMSLEEP:
+        verify_sleep(previous_state);
+        break;
+      case STATE_ASLEEP:
+        dont_wake_early(previous_state);
         break;
       case STATE_POST:         
           if (post(&counter, &wait_until)) timed_advance();
@@ -544,8 +600,7 @@ int main(void)
     }
 
     if(get_key_short(KEY0)) {
-      if (state == STATE_CONFIRMSLEEP) { advance_state(previous_state); }
-      else if(ignore_next_key_short) { ignore_next_key_short = 0; }
+      if(ignore_next_key_short) { ignore_next_key_short = 0; }
       else {
         advance_state(STATE_MANUALPEW);
         if (left_laser_tracker < 2) init_pew(PEW_INNER,0);
@@ -554,31 +609,8 @@ int main(void)
       }
     }
     if(get_key_rpt(KEY0)) {
-      if (state != STATE_CONFIRMSLEEP) {
-        previous_state = state;
-        advance_state(STATE_CONFIRMSLEEP);
-        fade_led(0,16);
-        fade_led(3,16);
-        fade_led(6,16);
-        fade_led(9,16);
-        charlie_array[0] = 1;
-        charlie_array[4] = 2;
-        counter = 3;
-        start_fade();
-      }
-      else {
-        if (counter == 0) { 
-          fade_led(counter, 0);
-          while(KEY_PIN & KEY0) { ;; } //wait for key release
-          sleep_my_pretty(HIBERNATE);
-          advance_state(previous_state);
-        }
-        else {
-          fade_led(counter*3,0);
-          --counter;
-        }
-      }
-      //++ignore_next_key_short;
+      previous_state = state;
+      advance_state(STATE_CONFIRMSLEEP);
     }
   }
 }
