@@ -325,8 +325,8 @@ uint8_t post(struct TrackTime *ptt) {
   ptt->wait_until0 = get_time() + POST_DELAY;
   PORTB &= ~(OUT_MASK_B);
   PORTC &= ~(OUT_MASK_C);
-  //CHARLIE_DDR &= ~(CHARLIE_MASK);
-  //CHARLIE_PORT &= ~(OUT_MASK_D | CHARLIE_MASK);
+  CHARLIE_DDR &= ~(CHARLIE_MASK);
+  CHARLIE_PORT &= ~(OUT_MASK_D | CHARLIE_MASK);
 
   if (ptt->counter0 > 21) return 1;
 
@@ -406,6 +406,7 @@ uint8_t pew(struct TrackTime *ptt) {
 }
 
 uint8_t animate_pew(struct TrackTime *ptt) {
+  static uint8_t fadein = 4;
   if (get_time() < charlie_timer) return 0;
   switch (generic_counter) {
     case 0:
@@ -464,12 +465,17 @@ uint8_t animate_pew(struct TrackTime *ptt) {
       break;
     case 18:
       for (uint8_t i=1; i<7; i++) charlie_array[i-1] = i;
-      charlie_timer = get_time() + 2000;
-      fade_led(12,8);
-      fade_led(13,8);
-      fade_led(14,8);
-      fade_led(15,8);
+      charlie_timer = get_time() + 200;
       start_fade();
+      break;
+    case 19:
+      fade_led(12,fadein);
+      fade_led(13,fadein);
+      fade_led(14,fadein);
+      fade_led(15,fadein);
+      charlie_timer = get_time() + 200;
+      if (++fadein < 16) return 0;
+      charlie_timer += 2000;
       break;
     default:
       return 1;
