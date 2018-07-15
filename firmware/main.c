@@ -94,6 +94,7 @@ struct TrackTime {
   uint32_t wait_until0, wait_until1;
 } tt;
 
+uint8_t generic_counter;
 uint32_t hard_sleep_time = HARD_SLEEP_PERIOD;
 uint32_t charlie_timer = 0;
 uint8_t ignore_next_key_short = 0;
@@ -324,8 +325,8 @@ uint8_t post(struct TrackTime *ptt) {
   ptt->wait_until0 = get_time() + POST_DELAY;
   PORTB &= ~(OUT_MASK_B);
   PORTC &= ~(OUT_MASK_C);
-  CHARLIE_DDR &= ~(CHARLIE_MASK);
-  CHARLIE_PORT &= ~(OUT_MASK_D | CHARLIE_MASK);
+  //CHARLIE_DDR &= ~(CHARLIE_MASK);
+  //CHARLIE_PORT &= ~(OUT_MASK_D | CHARLIE_MASK);
 
   if (ptt->counter0 > 21) return 1;
 
@@ -404,6 +405,80 @@ uint8_t pew(struct TrackTime *ptt) {
   return 0;
 }
 
+uint8_t animate_pew(struct TrackTime *ptt) {
+  if (get_time() < charlie_timer) return 0;
+  switch (generic_counter) {
+    case 0:
+      init_pew(PEW_BOTH, PEW_BOTH);
+      break;
+    case 1:
+      if (pew(ptt) == 0) return 0;
+      break;
+    case 2:
+      init_pew(PEW_OUTER,0);
+      break;
+    case 3:
+      if (pew(ptt) == 0) return 0;
+      break;
+    case 4:
+      init_pew(PEW_OUTER,0);
+      break;
+    case 5:
+      if (pew(ptt) == 0) return 0;
+      break;
+    case 6:
+      init_pew(0,PEW_INNER);
+      break;
+    case 7:
+      if (pew(ptt) == 0) return 0;
+      break;
+    case 8:
+      init_pew(0,PEW_INNER);
+      break;
+    case 9:
+      if (pew(ptt) == 0) return 0;
+      break;
+    case 10:
+      init_pew(0,PEW_OUTER);
+      break;
+    case 11:
+      if (pew(ptt) == 0) return 0;
+      break;
+    case 12:
+      init_pew(0,PEW_OUTER);
+      break;
+    case 13:
+      if (pew(ptt) == 0) return 0;
+      break;
+    case 14:
+      init_pew(PEW_INNER,0);
+      break;
+    case 15:
+      if (pew(ptt) == 0) return 0;
+      break;
+    case 16:
+      init_pew(PEW_INNER,0);
+      break;
+    case 17:
+      if (pew(ptt) == 0) return 0;
+      break;
+    case 18:
+      for (uint8_t i=1; i<7; i++) charlie_array[i-1] = i;
+      charlie_timer = get_time() + 2000;
+      fade_led(12,8);
+      fade_led(13,8);
+      fade_led(14,8);
+      fade_led(15,8);
+      start_fade();
+      break;
+    default:
+      return 1;
+      break;
+  };
+  ++generic_counter;
+  return 0;  
+}
+
 uint8_t sparkle(struct TrackTime *ptt) {
   if (get_time() < ptt->wait_until0) return 0;
   ptt->wait_until0 = get_time() + SPARKLE_DELAY;
@@ -448,6 +523,7 @@ void clean_slate(void) {
   charlie(0);
   clear_charlie_array();
   charlie_timer = 0;
+  generic_counter = 0;
   //Clear all fade values
   for (uint8_t i=0; i<FADE_RESOLUTION; i++) {
     bmatrix[i] = 0;
@@ -478,7 +554,6 @@ void advance_state(uint8_t newstate) {
       fade_led(3,16);
       fade_led(6,16);
       fade_led(9,16);
-      tt.counter0 = 0;
       start_fade();
       break;
     case STATE_POST:
@@ -489,8 +564,7 @@ void advance_state(uint8_t newstate) {
     case STATE_FADE:
       start_fade();
       break;
-    case STATE_PEW:
-      init_pew(PEW_BOTH, PEW_BOTH);      
+    case STATE_PEW:      
       break;
     case STATE_MANUALPEW:
       break;
@@ -604,7 +678,7 @@ int main(void)
         }
         break;
       case STATE_PEW:
-        if (pew(&tt)) advance_state(0);
+        if (animate_pew(&tt)) advance_state(0);
         break;
       case STATE_MANUALPEW:
         if (pew(&tt)) advance_state(0);
