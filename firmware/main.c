@@ -78,6 +78,7 @@ const uint8_t sweep3[6] = { 3, 1, 2, 6, 2, 1 };
 #define PEW_OUTER           16
 #define PEW_DELAY           80
 #define SPARKLE_DELAY       40
+#define HARD_SLEEP_PERIOD   (uint32_t)500*60*90 //90-minutes sleep (badge snoozes rouhgly 1/2 the time so 500 == 1second)
 
 volatile uint8_t charlie_array[6] = { 0, 0, 0, 0, 0, 0 };
 const uint8_t charlie_spin_idx[6] = { 1,4,3,2,5,6 };
@@ -89,11 +90,10 @@ const uint8_t charlie_spin_idx[6] = { 1,4,3,2,5,6 };
 volatile uint32_t ticks; //Used for upcounting milliseconds
 uint32_t wait_until = 0;
 uint32_t wait_until2 = 0;
-uint32_t wait_until3 = 0;
+uint32_t hard_sleep_time = HARD_SLEEP_PERIOD;
 uint32_t charlie_timer = 0;
 uint8_t counter = 0;
 uint8_t counter2 = 0;
-uint8_t counter3 = 0;
 uint8_t ignore_next_key_short = 0;
 
 /**************************** Function Prototypes *****************************/
@@ -438,10 +438,6 @@ uint8_t sweep(void) {
   //0,3,6,9,6,3
   if (get_time() > wait_until) {
     wait_until = get_time() + 120;
-    /*
-    uint8_t idx = counter%6;
-    uint8_t idx_last = ((6+counter)-1)%6;
-    */
 
     sweep_helper(counter, sweep0);
     sweep_helper(counter, sweep1);
@@ -484,6 +480,7 @@ void advance_state(uint8_t newstate) {
   if (newstate) state = newstate;
   else ++state;
   if (state > STATE_SPARKLE) state = STATE_POST;
+  if (get_time() > hard_sleep_time) state=STATE_ASLEEP; //Hibernate if no buttons pushed in a long time
   
   switch(state) {
     case STATE_NOSTATE:
@@ -558,6 +555,7 @@ void dont_wake_early(uint8_t previous_state) {
         disable_button_int();
         while(KEY_PIN & KEY0) { ;; } //wait for key release
         enable_button_int();
+        inc_hard_sleep();
         advance_state(previous_state);
         ignore_next_key_short |= KEY0;
         return;
@@ -573,6 +571,8 @@ void dont_wake_early(uint8_t previous_state) {
     }
   }
 }
+
+void inc_hard_sleep(void) { hard_sleep_time = get_time() + HARD_SLEEP_PERIOD; }
 
 /**************************** Main program function *****************************/
 int main(void)
@@ -643,11 +643,13 @@ int main(void)
         if (right_laser_tracker < 2) init_pew(0,PEW_INNER);
         else init_pew(0,PEW_OUTER);
         if (++right_laser_tracker > 3) right_laser_tracker = 0;
+        inc_hard_sleep();
       } 
     }
     if(get_key_rpt(KEY1)) {
       advance_state(0);
       ignore_next_key_short |= KEY1;
+      inc_hard_sleep();
     }
 
     if(get_key_short(KEY0)) {
@@ -657,12 +659,13 @@ int main(void)
         if (left_laser_tracker < 2) init_pew(PEW_INNER,0);
         else init_pew(PEW_OUTER,0);
         if (++left_laser_tracker > 3) left_laser_tracker = 0;
+        inc_hard_sleep();
       }
     }
     if(get_key_rpt(KEY0)) {
       if ((state != STATE_CONFIRMSLEEP) && (state != STATE_ASLEEP)) previous_state = state;
       advance_state(STATE_CONFIRMSLEEP);
-      //ignore_next_key_short |= KEY0;
+      inc_hard_sleep();
     }
   }
 }
