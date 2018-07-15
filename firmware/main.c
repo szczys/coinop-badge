@@ -127,6 +127,7 @@ uint8_t post(struct TrackTime *ptt);
 uint8_t pulsate(struct TrackTime *ptt);
 void init_pew(uint8_t counter0_value, uint8_t counter1_value);
 void laser(uint8_t counter_value, uint8_t laser_led[]);
+void laser_turret_servicer(uint8_t * counter, uint32_t * wait_until, uint32_t nexttime, uint8_t laserarray[]);
 uint8_t pew(struct TrackTime *ptt);
 uint8_t sparkle(struct TrackTime *ptt);
 void sweep_helper(uint8_t step, const uint8_t sweep_idx[]);
@@ -389,28 +390,24 @@ void laser(uint8_t counter_value, uint8_t laser_led[]) {
   };
 }
 
+void laser_turret_servicer(uint8_t * counter, uint32_t * wait_until, uint32_t nexttime, uint8_t laserarray[]) {
+  if (*counter == 12) counter = 0;
+  if (*counter > 0) {
+    if (get_time() > *wait_until) {
+      *wait_until = nexttime;
+      if (*counter == 5) *wait_until += PEW_DELAY;
+      laser(*counter,laserarray);
+      --(*counter);
+    }
+  }
+}
+
 uint8_t pew(struct TrackTime *ptt) {
   if ((ptt->counter0 == 0) & (ptt->counter1 == 0)) return 1;
   //set up callback timers
   uint32_t next = get_time() + PEW_DELAY;
-  if (ptt->counter0 == 12) ptt->counter0 = 0;
-  if (ptt->counter0 > 0) {
-    if (get_time() > ptt->wait_until0) {
-      ptt->wait_until0 = next;
-      if (ptt->counter0 == 5) ptt->wait_until0 += PEW_DELAY;
-      laser(ptt->counter0,laser_l);
-      --(ptt->counter0);
-    }
-  }
-  if (ptt->counter1 == 12) ptt->counter1 = 0;
-  if (ptt->counter1 > 0) {
-    if (get_time() > ptt->wait_until1) {
-      ptt->wait_until1 = next;
-      if (ptt->counter1 == 5) ptt->wait_until1 += PEW_DELAY;
-      laser(ptt->counter1, laser_r);
-      --(ptt->counter1);
-    }
-  }
+  laser_turret_servicer(&(ptt->counter0),&(ptt->wait_until0), next, laser_l);
+  laser_turret_servicer(&(ptt->counter1),&(ptt->wait_until1), next, laser_r);
   return 0;
 }
 
