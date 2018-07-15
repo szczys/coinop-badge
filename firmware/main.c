@@ -88,12 +88,21 @@ const uint8_t charlie_spin_idx[6] = { 1,4,3,2,5,6 };
 #define CHARLIE_PORT      PORTD
 
 volatile uint32_t ticks; //Used for upcounting milliseconds
+
+struct TrackTime {
+  uint8_t counter0, counter1;
+  uint32_t wait_until0, wait_until1;
+} tt;
+/*
 uint32_t wait_until = 0;
 uint32_t wait_until2 = 0;
+*/
 uint32_t hard_sleep_time = HARD_SLEEP_PERIOD;
 uint32_t charlie_timer = 0;
+/*
 uint8_t counter = 0;
 uint8_t counter2 = 0;
+*/
 uint8_t ignore_next_key_short = 0;
 
 /**************************** Function Prototypes *****************************/
@@ -114,11 +123,11 @@ void start_fade(void);
 void fade_led(uint8_t lednum, uint8_t dimness);
 
 //LED visualization functions
-uint8_t post(uint8_t * step, uint32_t * next_step_time);
-uint8_t pulsate(uint8_t * step_counter, uint32_t * next_step_time);
-void init_pew(uint8_t counter_value, uint8_t counter2_value);
-uint8_t pew(uint8_t * left_counter, uint32_t * left_next_step_time, uint8_t * right_counter, uint32_t * right_next_step_time);
-uint8_t sparkle(uint8_t * step, uint32_t * next_step_time);
+uint8_t post(struct TrackTime *ptt);
+uint8_t pulsate(struct TrackTime *ptt);
+void init_pew(uint8_t counter0_value, uint8_t counter1_value);
+uint8_t pew(struct TrackTime *ptt);
+uint8_t sparkle(struct TrackTime *ptt);
 
 //State handling functions
 void clean_slate(void);
@@ -314,35 +323,35 @@ void fade_led(uint8_t lednum, uint8_t dimness) {
 }
 
 /**************************** LED visualization functions *****************************/
-uint8_t post(uint8_t * step, uint32_t * next_step_time) {
-  if (get_time() < *next_step_time) return 0;
+uint8_t post(struct TrackTime *ptt) {
+  if (get_time() < ptt->wait_until0) return 0;
 
-  *next_step_time = get_time() + POST_DELAY;
+  ptt->wait_until0 = get_time() + POST_DELAY;
   PORTB &= ~(OUT_MASK_B);
   PORTC &= ~(OUT_MASK_C);
   CHARLIE_DDR &= ~(CHARLIE_MASK);
   CHARLIE_PORT &= ~(OUT_MASK_D | CHARLIE_MASK);
 
-  if (*step > 21) return 1;
+  if (ptt->counter0 > 21) return 1;
 
-  set_led(*step, 1);
-  *step += 1;
+  set_led(ptt->counter0, 1);
+  ptt->counter0 += 1;
   return 0;
 }
 
-uint8_t pulsate(uint8_t * step_counter, uint32_t * next_step_time) {
+uint8_t pulsate(struct TrackTime *ptt) {
   //step_counter is which frame of the animation is next
   //next_step_time needs to be reset so main knows when to next execute this function
-  if (get_time() < *next_step_time) return 0;
+  if (get_time() < ptt->wait_until0) return 0;
   else {
     if ((TIMSK1 & 1<<OCIE1A) == 0) {
       start_fade();
-      *step_counter = 0;
+      ptt->counter0 = 0;
       clear_charlie_array();
     }
-    for (uint8_t i=0; i<16; i++) fade_led(i,logscale[*step_counter]);
-    if (++(*step_counter) >= 18) return 1;
-    *next_step_time = get_time() + PULSATE_DELAY;
+    for (uint8_t i=0; i<16; i++) fade_led(i,logscale[ptt->counter0]);
+    if (++(ptt->counter0) >= 18) return 1;
+    ptt->wait_until0 = get_time() + PULSATE_DELAY;
   }
   if (get_time() > charlie_timer) {
     static uint8_t charlie_spin = 0;
@@ -354,20 +363,20 @@ uint8_t pulsate(uint8_t * step_counter, uint32_t * next_step_time) {
   return 0;
 }
 
-void init_pew(uint8_t counter_value, uint8_t counter2_value) {
-  if (counter_value > 0) {
-    counter = counter_value;
+void init_pew(uint8_t counter0_value, uint8_t counter1_value) {
+  if (counter0_value > 0) {
+    tt.counter0 = counter0_value;
     for (uint8_t i=0; i<6; i++) set_led(i,0);
   }
-  if (counter2_value > 0) {
-    counter2 = counter2_value;
+  if (counter1_value > 0) {
+    tt.counter1 = counter1_value;
     for (uint8_t i=6; i<12; i++) set_led(i,0);
   }
 }
 
-void laser_left(uint8_t * left_counter) {
+void laser_left(uint8_t left_counter) {
   //Little modulo hack allows firing innner/outer lasers at separate times
-  switch((*left_counter)%8) {
+  switch((left_counter)%8) {
     case 0: set_led(2,1); break;
     case 7: set_led(2,0); set_led(1,1); break;
     case 6: set_led(1,0); set_led(0,1); break;
@@ -379,8 +388,8 @@ void laser_left(uint8_t * left_counter) {
   };
 }
 
-void laser_right(uint8_t * right_counter) {
-  switch((*right_counter)%8) {
+void laser_right(uint8_t right_counter) {
+  switch((right_counter)%8) {
     case 0: set_led(11,1); break;
     case 7: set_led(11,0); set_led(10,1); break;
     case 6: set_led(10,0); set_led(9,1); break;
@@ -392,39 +401,39 @@ void laser_right(uint8_t * right_counter) {
   };
 }
 
-uint8_t pew(uint8_t * left_counter, uint32_t * left_next_step_time, uint8_t * right_counter, uint32_t * right_next_step_time) {
-  if ((*left_counter == 0) & (*right_counter == 0)) return 1;
+uint8_t pew(struct TrackTime *ptt) {
+  if ((ptt->counter0 == 0) & (ptt->counter1 == 0)) return 1;
   //set up callback timers
   uint32_t next = get_time() + PEW_DELAY;
-  if (*left_counter == 12) *left_counter = 0;
-  if (*left_counter > 0) {
-    if (get_time() > *left_next_step_time) {
-      *left_next_step_time = next;
-      if (*left_counter == 5) *left_next_step_time += PEW_DELAY;
-      laser_left(left_counter);
-      --*left_counter;
+  if (ptt->counter0 == 12) ptt->counter0 = 0;
+  if (ptt->counter0 > 0) {
+    if (get_time() > ptt->wait_until0) {
+      ptt->wait_until0 = next;
+      if (ptt->counter0 == 5) ptt->wait_until0 += PEW_DELAY;
+      laser_left(ptt->counter0);
+      --(ptt->counter0);
     }
   }
-  if (*right_counter == 12) *right_counter = 0;
-  if (*right_counter > 0) {
-    if (get_time() > *right_next_step_time) {
-      *right_next_step_time = next;
-      if (*right_counter == 5) *right_next_step_time += PEW_DELAY;
-      laser_right(right_counter);
-      --*right_counter;
+  if (ptt->counter1 == 12) ptt->counter1 = 0;
+  if (ptt->counter1 > 0) {
+    if (get_time() > ptt->wait_until1) {
+      ptt->wait_until1 = next;
+      if (ptt->counter1 == 5) ptt->wait_until1 += PEW_DELAY;
+      laser_right(ptt->counter1);
+      --(ptt->counter1);
     }
   }
   return 0;
 }
 
-uint8_t sparkle(uint8_t * step, uint32_t * next_step_time) {
-  if (get_time() < *next_step_time) return 0;
-  *next_step_time = get_time() + SPARKLE_DELAY;
+uint8_t sparkle(struct TrackTime *ptt) {
+  if (get_time() < ptt->wait_until0) return 0;
+  ptt->wait_until0 = get_time() + SPARKLE_DELAY;
 
-  if (*step > 0) set_led(sparkle_rando[*step-1], 0);
-  if (*step < 22) set_led(sparkle_rando[*step], 1);
+  if (ptt->counter0 > 0) set_led(sparkle_rando[ptt->counter0-1], 0);
+  if (ptt->counter0 < 22) set_led(sparkle_rando[ptt->counter0], 1);
   else return 1;
-  *step += 1;
+  ptt->counter0 += 1;
   return 0;
 }
 
@@ -434,17 +443,17 @@ void sweep_helper(uint8_t step, const uint8_t sweep_idx[]) {
     fade_led(sweep_idx[step%6],16);
 }
 
-uint8_t sweep(void) {
+uint8_t sweep(struct TrackTime *ptt) {
   //0,3,6,9,6,3
-  if (get_time() > wait_until) {
-    wait_until = get_time() + 120;
+  if (get_time() > ptt->wait_until0) {
+    ptt->wait_until0 = get_time() + 120;
 
-    sweep_helper(counter, sweep0);
-    sweep_helper(counter, sweep1);
-    sweep_helper(counter, sweep2);
+    sweep_helper(ptt->counter0, sweep0);
+    sweep_helper(ptt->counter0, sweep1);
+    sweep_helper(ptt->counter0, sweep2);
 
-    charlie_array[0] = sweep3[counter%6];
-    if (++counter > 55) return 1;
+    charlie_array[0] = sweep3[ptt->counter0%6];
+    if (++(ptt->counter0) > 55) return 1;
   } 
   return 0;
 }
@@ -467,10 +476,10 @@ void clean_slate(void) {
     dmatrix[i] = 0;
   }
   //Reset counters and wait times
-  wait_until = 0;
-  wait_until2 = 0;
-  counter = 0;
-  counter2 = 0;
+  tt.wait_until0 = 0;
+  tt.wait_until1 = 0;
+  tt.counter0 = 0;
+  tt.counter1 = 0;
 }
 
 void advance_state(uint8_t newstate) {
@@ -490,7 +499,7 @@ void advance_state(uint8_t newstate) {
       fade_led(3,16);
       fade_led(6,16);
       fade_led(9,16);
-      counter = 0;
+      tt.counter0 = 0;
       start_fade();
       break;
     case STATE_POST:
@@ -507,7 +516,7 @@ void advance_state(uint8_t newstate) {
     case STATE_MANUALPEW:
       break;
     case STATE_WAIT:
-        wait_until = get_time() + 4000;
+        tt.wait_until0 = get_time() + 4000;
         break;
     case STATE_SPARKLE:
       break;   
@@ -526,7 +535,7 @@ void verify_sleep(uint8_t previous_state) {
       return;
     }
     if(get_key_rpt(KEY0)) {
-      if (counter > 2) { 
+      if (tt.counter0 > 2) { 
         fade_led(0, 0);
         disable_button_int();
         while(KEY_PIN & KEY0) { ;; } //Wait for key release
@@ -535,8 +544,8 @@ void verify_sleep(uint8_t previous_state) {
         return;
       }
       else {
-        fade_led((3-counter)*3,0);
-        ++counter;
+        fade_led((3-tt.counter0)*3,0);
+        ++(tt.counter0);
       }
     }
   }
@@ -545,12 +554,12 @@ void verify_sleep(uint8_t previous_state) {
 void dont_wake_early(uint8_t previous_state) {
   start_fade();
   sleep_my_pretty(HIBERNATE);
-  counter = 0;
-  fade_led(counter, 16);
+  tt.counter0 = 0;
+  fade_led(tt.counter0, 16);
   start_fade();
   while(1) {
     if(get_key_rpt(KEY0)) {
-      if (counter > 2) {
+      if (tt.counter0 > 2) {
         fade_led(9,16);
         disable_button_int();
         while(KEY_PIN & KEY0) { ;; } //wait for key release
@@ -561,8 +570,8 @@ void dont_wake_early(uint8_t previous_state) {
         return;
       }
       else {
-        fade_led(counter*3,16);
-        ++counter;
+        fade_led(tt.counter0*3,16);
+        ++(tt.counter0);
       }
     }
     if(get_key_short(KEY0)) {
@@ -579,11 +588,14 @@ int main(void)
 {
   ticks = 0;
   state = STATE_POST;
-  wait_until = 0;
-  wait_until2 = 0;
+
+  tt.counter0=0;
+  tt.counter1=0;
+  tt.wait_until0=0;
+  tt.wait_until1=0;
+
   charlie_timer = 0;
-  counter = 0;
-  counter2 = 0;
+
   init_io();
   uint8_t left_laser_tracker = 0;
   uint8_t right_laser_tracker = 0;
@@ -608,30 +620,30 @@ int main(void)
         dont_wake_early(previous_state);
         break;
       case STATE_POST:         
-          if (post(&counter, &wait_until)) timed_advance();
+          if (post(&tt)) timed_advance();
         break;
       case STATE_SWEEP:
-        if (sweep()) timed_advance();
+        if (sweep(&tt)) timed_advance();
         break;
       case STATE_FADE:
-        if (pulsate(&counter, &wait_until)) {
-          if (++counter2 > 5) timed_advance();
-          else counter = 0;
+        if (pulsate(&tt)) {
+          if (++tt.counter1 > 5) timed_advance();
+          else tt.counter0 = 0;
         }
         break;
       case STATE_PEW:
-        if (pew(&counter, &wait_until, &counter2, &wait_until2)) advance_state(0);
+        if (pew(&tt)) advance_state(0);
         break;
       case STATE_MANUALPEW:
-        if (pew(&counter, &wait_until, &counter2, &wait_until2)) advance_state(0);
+        if (pew(&tt)) advance_state(0);
         break;
       case STATE_WAIT:
-        if (get_time() > wait_until) advance_state(0);
+        if (get_time() > tt.wait_until0) advance_state(0);
         break;
       case STATE_SPARKLE:
-        if (sparkle(&counter, &wait_until)) {
-          if (++counter2 > 5) timed_advance();
-          else counter = 0;
+        if (sparkle(&tt)) {
+          if (++(tt.counter1) > 5) timed_advance();
+          else tt.counter0 = 0;
         }
         break;
     };
