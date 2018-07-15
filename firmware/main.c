@@ -93,16 +93,9 @@ struct TrackTime {
   uint8_t counter0, counter1;
   uint32_t wait_until0, wait_until1;
 } tt;
-/*
-uint32_t wait_until = 0;
-uint32_t wait_until2 = 0;
-*/
+
 uint32_t hard_sleep_time = HARD_SLEEP_PERIOD;
 uint32_t charlie_timer = 0;
-/*
-uint8_t counter = 0;
-uint8_t counter2 = 0;
-*/
 uint8_t ignore_next_key_short = 0;
 
 /**************************** Function Prototypes *****************************/
@@ -391,7 +384,7 @@ void laser(uint8_t counter_value, uint8_t laser_led[]) {
 }
 
 void laser_turret_servicer(uint8_t * counter, uint32_t * wait_until, uint32_t nexttime, uint8_t laserarray[]) {
-  if (*counter == 12) counter = 0;
+  if (*counter == 12) *counter = 0;
   if (*counter > 0) {
     if (get_time() > *wait_until) {
       *wait_until = nexttime;
@@ -454,6 +447,7 @@ void clean_slate(void) {
   //Shut down Charlieplex
   charlie(0);
   clear_charlie_array();
+  charlie_timer = 0;
   //Clear all fade values
   for (uint8_t i=0; i<FADE_RESOLUTION; i++) {
     bmatrix[i] = 0;
@@ -574,19 +568,12 @@ int main(void)
   ticks = 0;
   state = STATE_POST;
 
-  tt.counter0=0;
-  tt.counter1=0;
-  tt.wait_until0=0;
-  tt.wait_until1=0;
-
-  charlie_timer = 0;
-
   init_io();
   uint8_t left_laser_tracker = 0;
   uint8_t right_laser_tracker = 0;
   uint8_t previous_state = STATE_FADE;
   
-  advance_state(STATE_POST);
+  advance_state(STATE_POST);  //This will initialize the global variables too
 
   init_timers();
   sei();
