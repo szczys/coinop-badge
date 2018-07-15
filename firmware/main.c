@@ -13,11 +13,12 @@ void Delay_ms(int cnt);
 #define STATE_CONFIRMWAKE   2
 #define STATE_ASLEEP        3
 #define STATE_POST          4
-#define STATE_FADE          5
-#define STATE_PEW           6
-#define STATE_MANUALPEW     7
-#define STATE_WAIT          8
-#define STATE_SPARKLE       9
+#define STATE_SWEEP         5
+#define STATE_FADE          6
+#define STATE_PEW           7
+#define STATE_MANUALPEW     8
+#define STATE_WAIT          9
+#define STATE_SPARKLE       10
 
 #define HIBERNATE           0
 #define SNOOZE              1
@@ -64,6 +65,10 @@ const uint8_t scan_order[16] = { 0,1,2,3,4,5,3,4,5,0,1,2,0,2,3,5 };
 const uint8_t pwm_distribution[16] = { 0, 8, 4, 12, 1, 9, 5, 13, 2, 10, 6, 14, 3, 7, 11, 15 };
 const uint8_t logscale[18] = { 1,2,3,4,5,6,7,10,14, 16, 14, 10, 7, 6, 5, 4, 3, 2 };
 const uint8_t sparkle_rando[22] = {18,2,0,14,4,5,3,15,10,13,6,17,11,8,21,9,19,16,12,1,20,7};
+const uint8_t sweep0[6] = { 0,3,6,9,6,3 };
+const uint8_t sweep1[6] = { 13,12,14,15,14,12 };
+const uint8_t sweep2[6] = { 2,5,8,11,8,5 };
+const uint8_t sweep3[6] = { 3, 1, 2, 6, 2, 1 };
 
 #define POST_DELAY          100
 #define PULSATE_DELAY       40
@@ -84,9 +89,11 @@ const uint8_t charlie_spin_idx[6] = { 1,4,3,2,5,6 };
 volatile uint32_t ticks; //Used for upcounting milliseconds
 uint32_t wait_until = 0;
 uint32_t wait_until2 = 0;
+uint32_t wait_until3 = 0;
 uint32_t charlie_timer = 0;
 uint8_t counter = 0;
 uint8_t counter2 = 0;
+uint8_t counter3 = 0;
 uint8_t ignore_next_key_short = 0;
 
 /**************************** Function Prototypes *****************************/
@@ -173,7 +180,7 @@ void init_timers(void) {
 
 void init_pcint(void) {
   PCICR |= (1<<PCIE1);
-  PCMSK1 |= (1<<PCINT9 | 1<<PCINT8);
+  PCMSK1 |= (1<<PCINT8);
   PCIFR |= 1<<PCIF1;    //Clear the PCINT flag (might not have been done after last wakeup)
 }
 
@@ -194,6 +201,7 @@ void sleep_my_pretty(uint8_t timed) {
   disable_io();         //make sure we're not driving pins while asleep
   init_pcint();         //enable pin-change interrupts to wake from sleep
   if (timed) {
+    PCMSK1 |= 1<<PCINT9;  //Only need pcint on KEY1 when snoozing
     wdt_reset();
     MCUSR &= ~(1<<WDRF);
     WDTCSR |= (1<<WDCE | 1<<WDE);
@@ -205,6 +213,7 @@ void sleep_my_pretty(uint8_t timed) {
   sei();                //Ensure interrupts are enabled (lest we never wake)
   sleep_cpu();          //Sleep immediately after enabling interrupts so non can fire before sleep
   if (timed) {
+    PCMSK1 &= ~(1<<PCINT9); //Only need pcint on KEY1 when snoozing
     MCUSR &= ~(1<<WDRF);
     WDTCSR |= (1<<WDCE | 1<<WDE);
     WDTCSR = 0;
@@ -212,7 +221,6 @@ void sleep_my_pretty(uint8_t timed) {
   disable_pcint();      //Don't need pin-change interrupts when awake
   sleep_disable();      //Disable to we're in a known state next time we need to sleep
   init_io();            //Get IO pins ready for wakeful operations
-  while((get_key_short(KEY0)) || get_key_short(KEY1)) { ;; } //Make sure we clear any leftover button-ups from before sleep
 }
 
 void set_led(uint8_t lednum, uint8_t onoff) {
@@ -420,6 +428,31 @@ uint8_t sparkle(uint8_t * step, uint32_t * next_step_time) {
   return 0;
 }
 
+
+void sweep_helper(uint8_t step, const uint8_t sweep_idx[]) {
+    fade_led(sweep_idx[((6+step)-1)%6],0);
+    fade_led(sweep_idx[step%6],16);
+}
+
+uint8_t sweep(void) {
+  //0,3,6,9,6,3
+  if (get_time() > wait_until) {
+    wait_until = get_time() + 120;
+    /*
+    uint8_t idx = counter%6;
+    uint8_t idx_last = ((6+counter)-1)%6;
+    */
+
+    sweep_helper(counter, sweep0);
+    sweep_helper(counter, sweep1);
+    sweep_helper(counter, sweep2);
+
+    charlie_array[0] = sweep3[counter%6];
+    if (++counter > 55) return 1;
+  } 
+  return 0;
+}
+
 /**************************** State handling functions *****************************/
 void clean_slate(void) {
   //Set all IO back to initialization
@@ -464,6 +497,9 @@ void advance_state(uint8_t newstate) {
       start_fade();
       break;
     case STATE_POST:
+      break;
+    case STATE_SWEEP:
+      start_fade();
       break;
     case STATE_FADE:
       start_fade();
@@ -523,7 +559,7 @@ void dont_wake_early(uint8_t previous_state) {
         while(KEY_PIN & KEY0) { ;; } //wait for key release
         enable_button_int();
         advance_state(previous_state);
-        //ignore_next_key_short |= KEY0;
+        ignore_next_key_short |= KEY0;
         return;
       }
       else {
@@ -574,6 +610,9 @@ int main(void)
       case STATE_POST:         
           if (post(&counter, &wait_until)) timed_advance();
         break;
+      case STATE_SWEEP:
+        if (sweep()) timed_advance();
+        break;
       case STATE_FADE:
         if (pulsate(&counter, &wait_until)) {
           if (++counter2 > 5) timed_advance();
@@ -623,7 +662,7 @@ int main(void)
     if(get_key_rpt(KEY0)) {
       if ((state != STATE_CONFIRMSLEEP) && (state != STATE_ASLEEP)) previous_state = state;
       advance_state(STATE_CONFIRMSLEEP);
-      ignore_next_key_short |= KEY0;
+      //ignore_next_key_short |= KEY0;
     }
   }
 }
