@@ -114,8 +114,9 @@ void disable_io(void);
 void init_timers(void);
 void init_pcint(void);
 void disable_pcint(void);
+void disable_button_int(void);
+void enable_button_int(void);
 void sleep_my_pretty(uint8_t timed);
-void snooze(void);
 void set_led(uint8_t lednum, uint8_t onoff);
 void clear_charlie_array(void);
 void charlie(uint8_t led_num);
@@ -126,13 +127,20 @@ void fade_led(uint8_t lednum, uint8_t dimness);
 uint8_t post(struct TrackTime *ptt);
 uint8_t pulsate(struct TrackTime *ptt);
 void init_pew(uint8_t counter0_value, uint8_t counter1_value);
+void laser_left(uint8_t left_counter);
+void laser_right(uint8_t right_counter);
 uint8_t pew(struct TrackTime *ptt);
 uint8_t sparkle(struct TrackTime *ptt);
+void sweep_helper(uint8_t step, const uint8_t sweep_idx[]);
+uint8_t sweep(struct TrackTime *ptt);
 
 //State handling functions
 void clean_slate(void);
 void advance_state(uint8_t newstate);
 void timed_advance(void);
+void verify_sleep(uint8_t previous_state);
+void dont_wake_early(uint8_t previous_state);
+void inc_hard_sleep(void);
 
 /**************************** Hardware specific functions *****************************/
 void Delay_ms(int cnt) {
