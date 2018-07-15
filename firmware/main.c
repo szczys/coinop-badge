@@ -169,7 +169,6 @@ void init_timers(void) {
   TCCR1B = 1<<WGM12 | 1<<CS11 | 1<<CS10;  //CTC mode with prescaler of 64
   OCR1AL = 20; // 6.2 kHz
   //TIMSK1 |= 1<<OCIE1A;
-
 }
 
 void init_pcint(void) {
@@ -180,6 +179,14 @@ void init_pcint(void) {
 
 void disable_pcint(void) {
   PCICR &= ~(1<<PCIE1);
+}
+
+void disable_button_int(void) {
+  TIMSK0 &= ~(1<<TOIE0);		//enable overflow interrupt
+}
+
+void enable_button_int(void) {
+  TIMSK0 |= 1<<TOIE0;		//enable overflow interrupt
 }
 
 void sleep_my_pretty(uint8_t timed) {
@@ -205,7 +212,7 @@ void sleep_my_pretty(uint8_t timed) {
   disable_pcint();      //Don't need pin-change interrupts when awake
   sleep_disable();      //Disable to we're in a known state next time we need to sleep
   init_io();            //Get IO pins ready for wakeful operations
-  ++ignore_next_key_short;
+  while((get_key_short(KEY0)) || get_key_short(KEY1)) { ;; } //Make sure we clear any leftover button-ups from before sleep
 }
 
 void set_led(uint8_t lednum, uint8_t onoff) {
@@ -453,7 +460,7 @@ void advance_state(uint8_t newstate) {
       fade_led(3,16);
       fade_led(6,16);
       fade_led(9,16);
-      counter = 3;
+      counter = 0;
       start_fade();
       break;
     case STATE_POST:
@@ -486,40 +493,45 @@ void verify_sleep(uint8_t previous_state) {
       return;
     }
     if(get_key_rpt(KEY0)) {
-      if (counter == 0) { 
-        fade_led(counter, 0);
-        cli();  //Prevent more repeat reads
-        while(KEY_PIN & KEY0) { ;; } //wait for key release
+      if (counter > 2) { 
+        fade_led(0, 0);
+        disable_button_int();
+        while(KEY_PIN & KEY0) { ;; } //Wait for key release
+        enable_button_int();
         advance_state(STATE_ASLEEP);
         return;
       }
       else {
-        fade_led(counter*3,0);
-        --counter;
+        fade_led((3-counter)*3,0);
+        ++counter;
       }
     }
   }
 }
 
 void dont_wake_early(uint8_t previous_state) {
+  start_fade();
   sleep_my_pretty(HIBERNATE);
   counter = 0;
-  fade_led(counter, 1);
+  fade_led(counter, 16);
   start_fade();
   while(1) {
     if(get_key_rpt(KEY0)) {
-      if (counter == 3) { 
+      if (counter > 2) {
+        fade_led(9,16);
+        disable_button_int();
         while(KEY_PIN & KEY0) { ;; } //wait for key release
+        enable_button_int();
         advance_state(previous_state);
-        sei();
+        //ignore_next_key_short |= KEY0;
         return;
       }
       else {
-        fade_led(++counter*3,1);
+        fade_led(counter*3,16);
+        ++counter;
       }
     }
     if(get_key_short(KEY0)) {
-      clean_slate();
       advance_state(STATE_ASLEEP);
       return;
     }
@@ -586,7 +598,7 @@ int main(void)
     };
     
     if(get_key_short(KEY1)) {
-      if (ignore_next_key_short) { ignore_next_key_short = 0; }
+      if (ignore_next_key_short & KEY1) { ignore_next_key_short &= ~KEY1; }
       else {
         advance_state(STATE_MANUALPEW);
         if (right_laser_tracker < 2) init_pew(0,PEW_INNER);
@@ -596,11 +608,11 @@ int main(void)
     }
     if(get_key_rpt(KEY1)) {
       advance_state(0);
-      ++ignore_next_key_short;
+      ignore_next_key_short |= KEY1;
     }
 
     if(get_key_short(KEY0)) {
-      if(ignore_next_key_short) { ignore_next_key_short = 0; }
+      if(ignore_next_key_short & KEY0) { ignore_next_key_short &= ~KEY0; }
       else {
         advance_state(STATE_MANUALPEW);
         if (left_laser_tracker < 2) init_pew(PEW_INNER,0);
@@ -609,15 +621,16 @@ int main(void)
       }
     }
     if(get_key_rpt(KEY0)) {
-      previous_state = state;
+      if ((state != STATE_CONFIRMSLEEP) && (state != STATE_ASLEEP)) previous_state = state;
       advance_state(STATE_CONFIRMSLEEP);
+      ignore_next_key_short |= KEY0;
     }
   }
 }
 
 /**************************** Interrupt servicing functions *****************************/
 ISR(PCINT1_vect) {
-  key_state |= KEY_MASK;  //Clear the key press (wake only, don't react as if user input)
+  //Don't actually need an ISR to wake from sleep
 }
 
 ISR(WDT_vect) {
