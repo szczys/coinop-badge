@@ -6,8 +6,6 @@
 #include <avr/wdt.h>
 #include "debounce.h"
 
-void Delay_ms(int cnt);
-
 #define STATE_NOSTATE       0
 #define STATE_CONFIRMSLEEP  1
 #define STATE_CONFIRMWAKE   2
@@ -69,6 +67,8 @@ const uint8_t sweep0[6] = { 0,3,6,9,6,3 };
 const uint8_t sweep1[6] = { 13,12,14,15,14,12 };
 const uint8_t sweep2[6] = { 2,5,8,11,8,5 };
 const uint8_t sweep3[6] = { 3, 1, 2, 6, 2, 1 };
+uint8_t laser_l[6] = { 2,1,0,5,4,3 };
+uint8_t laser_r[6] = { 11,10,9,8,7,6 };
 
 #define POST_DELAY          100
 #define PULSATE_DELAY       40
@@ -107,7 +107,6 @@ uint8_t ignore_next_key_short = 0;
 
 /**************************** Function Prototypes *****************************/
 //Hardware specific functions
-void Delay_ms(int cnt);
 uint32_t get_time(void);
 void init_io(void);
 void disable_io(void);
@@ -127,8 +126,7 @@ void fade_led(uint8_t lednum, uint8_t dimness);
 uint8_t post(struct TrackTime *ptt);
 uint8_t pulsate(struct TrackTime *ptt);
 void init_pew(uint8_t counter0_value, uint8_t counter1_value);
-void laser_left(uint8_t left_counter);
-void laser_right(uint8_t right_counter);
+void laser(uint8_t counter_value, uint8_t laser_led[]);
 uint8_t pew(struct TrackTime *ptt);
 uint8_t sparkle(struct TrackTime *ptt);
 void sweep_helper(uint8_t step, const uint8_t sweep_idx[]);
@@ -143,11 +141,6 @@ void dont_wake_early(uint8_t previous_state);
 void inc_hard_sleep(void);
 
 /**************************** Hardware specific functions *****************************/
-void Delay_ms(int cnt) {
-	while (cnt-->0) {
-		_delay_ms(1);
-	}
-}
 
 uint32_t get_time(void) {
   //Return the upcounting milliseconds timer (interrupt driven)
@@ -382,30 +375,17 @@ void init_pew(uint8_t counter0_value, uint8_t counter1_value) {
   }
 }
 
-void laser_left(uint8_t left_counter) {
+void laser(uint8_t counter_value, uint8_t laser_led[]) {
   //Little modulo hack allows firing innner/outer lasers at separate times
-  switch((left_counter)%8) {
-    case 0: set_led(2,1); break;
-    case 7: set_led(2,0); set_led(1,1); break;
-    case 6: set_led(1,0); set_led(0,1); break;
-    case 5: set_led(0,0); break;
-    case 4: set_led(5,1); break;
-    case 3: set_led(5,0); set_led(4,1); break;
-    case 2: set_led(4,0); set_led(3,1); break;
-    case 1: set_led(3,0); break;
-  };
-}
-
-void laser_right(uint8_t right_counter) {
-  switch((right_counter)%8) {
-    case 0: set_led(11,1); break;
-    case 7: set_led(11,0); set_led(10,1); break;
-    case 6: set_led(10,0); set_led(9,1); break;
-    case 5: set_led(9,0); break;
-    case 4: set_led(8,1); break;
-    case 3: set_led(8,0); set_led(7,1); break;
-    case 2: set_led(7,0); set_led(6,1); break;
-    case 1: set_led(6,0); break;
+  switch(counter_value%8) {
+    case 0: set_led(laser_led[0],1); break;
+    case 7: set_led(laser_led[0],0); set_led(laser_led[1],1); break;
+    case 6: set_led(laser_led[1],0); set_led(laser_led[2],1); break;
+    case 5: set_led(laser_led[2],0); break;
+    case 4: set_led(laser_led[3],1); break;
+    case 3: set_led(laser_led[3],0); set_led(laser_led[4],1); break;
+    case 2: set_led(laser_led[4],0); set_led(laser_led[5],1); break;
+    case 1: set_led(laser_led[5],0); break;
   };
 }
 
@@ -418,7 +398,7 @@ uint8_t pew(struct TrackTime *ptt) {
     if (get_time() > ptt->wait_until0) {
       ptt->wait_until0 = next;
       if (ptt->counter0 == 5) ptt->wait_until0 += PEW_DELAY;
-      laser_left(ptt->counter0);
+      laser(ptt->counter0,laser_l);
       --(ptt->counter0);
     }
   }
@@ -427,7 +407,7 @@ uint8_t pew(struct TrackTime *ptt) {
     if (get_time() > ptt->wait_until1) {
       ptt->wait_until1 = next;
       if (ptt->counter1 == 5) ptt->wait_until1 += PEW_DELAY;
-      laser_right(ptt->counter1);
+      laser(ptt->counter1, laser_r);
       --(ptt->counter1);
     }
   }
