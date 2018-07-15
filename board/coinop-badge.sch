@@ -51,7 +51,7 @@ encoding utf-8
 Sheet 1 1
 Title "Coin-Op Badge"
 Date ""
-Rev "1.0"
+Rev "2.1"
 Comp "Mike Szczys - Jumptuck.com"
 Comment1 ""
 Comment2 ""
@@ -1258,4 +1258,47 @@ Wire Wire Line
 NoConn ~ 4150 3850
 NoConn ~ 6600 4200
 NoConn ~ 7000 4200
+$Comp
+L VCC #PWR021
+U 1 1 5B484985
+P 4400 6800
+F 0 "#PWR021" H 4400 6650 50  0001 C CNN
+F 1 "VCC" H 4400 6950 50  0000 C CNN
+F 2 "" H 4400 6800 50  0001 C CNN
+F 3 "" H 4400 6800 50  0001 C CNN
+	1    4400 6800
+	1    0    0    -1  
+$EndComp
+$Comp
+L GND #PWR022
+U 1 1 5B4849FF
+P 4400 7150
+F 0 "#PWR022" H 4400 6900 50  0001 C CNN
+F 1 "GND" H 4400 7000 50  0000 C CNN
+F 2 "" H 4400 7150 50  0001 C CNN
+F 3 "" H 4400 7150 50  0001 C CNN
+	1    4400 7150
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	4950 6900 4400 6900
+Wire Wire Line
+	4400 6900 4400 6800
+Wire Wire Line
+	4950 7000 4400 7000
+Wire Wire Line
+	4400 7000 4400 7150
+NoConn ~ 5450 6900
+NoConn ~ 5450 7000
+$Comp
+L Conn_02x02_Odd_Even J2
+U 1 1 5B486069
+P 5150 6900
+F 0 "J2" H 5200 7000 50  0000 C CNN
+F 1 "Conn_02x02_Odd_Even" H 5200 6700 50  0000 C CNN
+F 2 "Szczys:SAO_Pin_Header_Straight_2x02_Pitch2.54mm_SMD" H 5150 6900 50  0001 C CNN
+F 3 "" H 5150 6900 50  0001 C CNN
+	1    5150 6900
+	1    0    0    -1  
+$EndComp
 $EndSCHEMATC
