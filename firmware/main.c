@@ -406,7 +406,6 @@ uint8_t pew(struct TrackTime *ptt) {
 }
 
 uint8_t animate_pew(struct TrackTime *ptt) {
-  static uint8_t fadein = 4;
   if (get_time() < charlie_timer) return 0;
   switch (generic_counter) {
     case 0:
@@ -464,18 +463,30 @@ uint8_t animate_pew(struct TrackTime *ptt) {
       if (pew(ptt) == 0) return 0;
       break;
     case 18:
-      for (uint8_t i=1; i<7; i++) charlie_array[i-1] = i;
+      fade_led(12,16);
+      fade_led(14,16);
       charlie_timer = get_time() + 200;
       start_fade();
       break;
     case 19:
-      fade_led(12,fadein);
-      fade_led(13,fadein);
-      fade_led(14,fadein);
-      fade_led(15,fadein);
+      fade_led(13,16);
+      fade_led(15,16);
       charlie_timer = get_time() + 200;
-      if (++fadein < 16) return 0;
-      charlie_timer += 2000;
+      break;
+    case 20:
+      charlie_array[0] = 1;
+      charlie_array[1] = 2;
+      charlie_timer = get_time() + 200;
+      break;
+    case 21:
+      charlie_array[2] = 4;
+      charlie_array[3] = 5;
+      charlie_timer = get_time() + 200;
+      break;
+    case 22:
+      charlie_array[4] = 3;
+      charlie_array[5] = 6;
+      charlie_timer = get_time() + 2000;
       break;
     default:
       return 1;
