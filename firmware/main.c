@@ -711,20 +711,22 @@ int main(void)
         break;
     };
     
-    if(get_key_short(KEY1)) {
-      if (ignore_next_key_short & KEY1) { ignore_next_key_short &= ~KEY1; }
-      else {
-        advance_state(STATE_MANUALPEW);
-        if (right_laser_tracker < 2) init_pew(0,PEW_INNER);
-        else init_pew(0,PEW_OUTER);
-        if (++right_laser_tracker > 3) right_laser_tracker = 0;
+    if ((state != STATE_ASLEEP) && (state != STATE_CONFIRMSLEEP)) {
+      if(get_key_short(KEY1)) {
+        if (ignore_next_key_short & KEY1) { ignore_next_key_short &= ~KEY1; }
+        else {
+          advance_state(STATE_MANUALPEW);
+          if (right_laser_tracker < 2) init_pew(0,PEW_INNER);
+          else init_pew(0,PEW_OUTER);
+          if (++right_laser_tracker > 3) right_laser_tracker = 0;
+          inc_hard_sleep();
+        } 
+      }
+      if(get_key_rpt(KEY1)) {
+        advance_state(0);
+        ignore_next_key_short |= KEY1;
         inc_hard_sleep();
-      } 
-    }
-    if(get_key_rpt(KEY1)) {
-      advance_state(0);
-      ignore_next_key_short |= KEY1;
-      inc_hard_sleep();
+      }
     }
 
     if(get_key_short(KEY0)) {
