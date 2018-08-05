@@ -6,6 +6,8 @@
 #include <avr/wdt.h>
 #include "debounce.h"
 
+#define FIRMWARE_VERSION    3
+
 #define STATE_NOSTATE       0
 #define STATE_CONFIRMSLEEP  1
 #define STATE_CONFIRMWAKE   2
@@ -155,16 +157,20 @@ void init_io(void) {
   KEY_DDR &= ~KEY_MASK;
 }
 
+void all_outputs_low(void) {
+  PORTB &= ~(OUT_MASK_B);
+  PORTC &= ~(OUT_MASK_C);
+  PORTD &= ~(OUT_MASK_D);
+}
+
 void disable_io(void) {
   //Will be used for sleep modes
 
   //Set up LED pins as inputs and disable pull-ups
   DDRB &= ~(OUT_MASK_B);
-  PORTB &= ~(OUT_MASK_B);
   DDRC &= ~(OUT_MASK_C);
-  PORTC &= ~(OUT_MASK_C);
   DDRD &= ~(OUT_MASK_D);
-  PORTD &= ~(OUT_MASK_D);
+  all_outputs_low();
 
   //All charlieplexing pins input (Hi-Z mode)
   CHARLIE_DDR &= ~(CHARLIE_MASK);
@@ -627,7 +633,10 @@ void dont_wake_early(uint8_t previous_state) {
   tt.counter0 = 0;
   fade_led(tt.counter0, 16);
   start_fade();
-  while(1) {
+  uint32_t loopbreaker = 0; //Guards for false button detections
+  //1600000 is about 4x as long as a wake should take, if button not repeating
+  //and button not released, go back to sleep
+  while(++loopbreaker < 1600000) {
     if(get_key_rpt(KEY0)) {
       if (tt.counter0 > 2) {
         fade_led(9,16);
@@ -645,10 +654,11 @@ void dont_wake_early(uint8_t previous_state) {
       }
     }
     if(get_key_short(KEY0)) {
-      advance_state(STATE_ASLEEP);
-      return;
+      break;
     }
   }
+  advance_state(STATE_ASLEEP);
+  return;
 }
 
 void inc_hard_sleep(void) { hard_sleep_time = get_time() + HARD_SLEEP_PERIOD; }
@@ -770,11 +780,9 @@ ISR(TIMER0_OVF_vect)           // every 1ms
 
 ISR(TIMER1_COMPA_vect) {
   static uint8_t dimness = 0;
-  PORTB &= ~(OUT_MASK_B);
+  all_outputs_low();
   PORTB |= bmatrix[dimness];
-  PORTC &= ~(OUT_MASK_C);
   PORTC |= cmatrix[dimness];
-  PORTD &= ~(OUT_MASK_D);
   PORTD |= dmatrix[dimness];
 
   static uint8_t c = 0;
